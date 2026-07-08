@@ -15,6 +15,7 @@ async function migrate(database: SQLite.SQLiteDatabase): Promise<void> {
     DROP TABLE IF EXISTS area_stops;
     DROP TABLE IF EXISTS area_fare_levels;
     DROP TABLE IF EXISTS fare_levels;
+    DROP TABLE IF EXISTS journey_fares;
 
     CREATE TABLE IF NOT EXISTS journeys (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, start_area_id TEXT, end_area_id TEXT,
@@ -87,12 +88,13 @@ async function migrate(database: SQLite.SQLiteDatabase): Promise<void> {
     CREATE TABLE IF NOT EXISTS journey_fares (
       id TEXT PRIMARY KEY, journey_id TEXT NOT NULL,
       from_journey_area_id TEXT NOT NULL, to_journey_area_id TEXT NOT NULL,
-      amount REAL NOT NULL DEFAULT 0,
+      fare_level_id TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (journey_id) REFERENCES journeys(id),
       FOREIGN KEY (from_journey_area_id) REFERENCES journey_areas(id),
-      FOREIGN KEY (to_journey_area_id) REFERENCES journey_areas(id)
+      FOREIGN KEY (to_journey_area_id) REFERENCES journey_areas(id),
+      FOREIGN KEY (fare_level_id) REFERENCES fare_levels(id)
     );
     CREATE INDEX IF NOT EXISTS idx_journey_fares ON journey_fares(journey_id, from_journey_area_id, to_journey_area_id);
 

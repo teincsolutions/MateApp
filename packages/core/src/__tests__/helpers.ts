@@ -17,7 +17,7 @@ export interface TestSeedData {
   journeyAreas: Array<{ id: string; areaId: string; sequence: number }>;
   fareLevels: Array<{ id: string; journeyId: string; label: string; amount: number }>;
   areaStops: Array<{ areaId: string; stopId: string }>;
-  journeyFares: Array<{ fromJAId: string; toJAId: string; amount: number }>;
+  journeyFares: Array<{ fromJAId: string; toJAId: string; fareLevelId: string }>;
   trackPoints: Array<{ lat: number; lng: number }>;
 }
 
@@ -79,9 +79,9 @@ export async function seedTestData(db: Database.Database): Promise<TestSeedData>
   const ja2 = await journeyAreaRepo.create(journey.id, area2.id, 2);
   const ja3 = await journeyAreaRepo.create(journey.id, area3.id, 3);
 
-  await journeyFareRepo.create(journey.id, ja1.id, ja2.id, 3.50);
-  await journeyFareRepo.create(journey.id, ja1.id, ja3.id, 5.00);
-  await journeyFareRepo.create(journey.id, ja2.id, ja3.id, 3.00);
+  await journeyFareRepo.create(journey.id, ja1.id, ja2.id, fl1a.id);
+  await journeyFareRepo.create(journey.id, ja1.id, ja3.id, fl3b.id);
+  await journeyFareRepo.create(journey.id, ja2.id, ja3.id, fl2a.id);
 
   const trackCoords = [
     { lat: 5.5490, lng: -0.2010 },
@@ -147,9 +147,9 @@ export async function seedTestData(db: Database.Database): Promise<TestSeedData>
       { areaId: area3.id, stopId: stop3c.id },
     ],
     journeyFares: [
-      { fromJAId: ja1.id, toJAId: ja2.id, amount: 3.50 },
-      { fromJAId: ja1.id, toJAId: ja3.id, amount: 5.00 },
-      { fromJAId: ja2.id, toJAId: ja3.id, amount: 3.00 },
+      { fromJAId: ja1.id, toJAId: ja2.id, fareLevelId: fl1a.id },
+      { fromJAId: ja1.id, toJAId: ja3.id, fareLevelId: fl3b.id },
+      { fromJAId: ja2.id, toJAId: ja3.id, fareLevelId: fl2a.id },
     ],
     trackPoints: trackCoords,
   };

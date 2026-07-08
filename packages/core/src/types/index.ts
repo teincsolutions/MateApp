@@ -65,7 +65,7 @@ export interface JourneyFare {
   journey_id: string;
   from_journey_area_id: string;
   to_journey_area_id: string;
-  amount: number;
+  fare_level_id: string;
   created_at: string;
   updated_at: string;
 }

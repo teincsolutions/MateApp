@@ -13,6 +13,13 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="mapping" options={{ headerShown: false, presentation: 'fullScreenModal' }} />
         <Stack.Screen name="journey/new" options={{ title: 'New Journey', presentation: 'modal' }} />
+        <Stack.Screen name="manage" options={{ title: 'Manage Data', headerBackButtonDisplayMode: 'minimal' }} />
+        <Stack.Screen name="manage/stops" options={{ title: 'Stops' }} />
+        <Stack.Screen name="manage/stops/[id]" options={{ title: 'Edit Stop' }} />
+        <Stack.Screen name="manage/areas" options={{ title: 'Areas' }} />
+        <Stack.Screen name="manage/areas/[id]" options={{ title: 'Edit Area' }} />
+        <Stack.Screen name="manage/fare-levels" options={{ title: 'Fare Levels' }} />
+        <Stack.Screen name="manage/fare-levels/[id]" options={{ title: 'Edit Fare Level' }} />
         <Stack.Screen name="+not-found" options={{ title: 'Not Found' }} />
       </Stack>
     </>

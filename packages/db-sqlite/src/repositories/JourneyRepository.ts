@@ -46,6 +46,8 @@ export class JourneyRepository implements IJourneyRepository {
 
   async delete(id: string): Promise<void> {
     const db = await getDatabase();
+    await db.runAsync('DELETE FROM area_fare_levels WHERE fare_level_id IN (SELECT id FROM fare_levels WHERE journey_id = ?)', [id]);
+    await db.runAsync('DELETE FROM fare_levels WHERE journey_id = ?', [id]);
     await db.runAsync('DELETE FROM journey_fares WHERE journey_id = ?', [id]);
     await db.runAsync('DELETE FROM track_points WHERE journey_id = ?', [id]);
     await db.runAsync('DELETE FROM journey_areas WHERE journey_id = ?', [id]);

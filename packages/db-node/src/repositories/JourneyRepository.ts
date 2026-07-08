@@ -40,6 +40,8 @@ export class JourneyRepository implements IJourneyRepository {
   }
 
   async delete(id: string): Promise<void> {
+    this.db.prepare('DELETE FROM area_fare_levels WHERE fare_level_id IN (SELECT id FROM fare_levels WHERE journey_id = ?)').run(id);
+    this.db.prepare('DELETE FROM fare_levels WHERE journey_id = ?').run(id);
     this.db.prepare('DELETE FROM journey_fares WHERE journey_id = ?').run(id);
     this.db.prepare('DELETE FROM track_points WHERE journey_id = ?').run(id);
     this.db.prepare('DELETE FROM journey_areas WHERE journey_id = ?').run(id);

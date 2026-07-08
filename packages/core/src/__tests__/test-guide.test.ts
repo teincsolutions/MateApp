@@ -408,15 +408,19 @@ describe('Route Mapping Test Guide', () => {
         const aRepo = new AreaRepository(db);
         const jaRepo = new JourneyAreaRepository(db);
         const jfRepo = new JourneyFareRepository(db);
+        const flRepo = new AreaFareLevelRepository(db);
         const j = await jRepo.create('A to B');
         const a1 = await aRepo.create('Area A');
         const a2 = await aRepo.create('Area B');
         const ja1 = await jaRepo.create(j.id, a1.id, 1);
         const ja2 = await jaRepo.create(j.id, a2.id, 2);
-        await jfRepo.create(j.id, ja1.id, ja2.id, 5.00);
+        const fl = await flRepo.create(j.id, 'Standard', 0, 5.00);
+        await jfRepo.create(j.id, ja1.id, ja2.id, fl.id);
         const fare = await jfRepo.getBetweenAreas(j.id, a1.id, a2.id);
         expect(fare).not.toBeNull();
-        expect(fare!.amount).toBe(5.00);
+        const fareLevels = await flRepo.getByJourney(j.id);
+        const matched = fareLevels.find(l => l.id === fare!.fare_level_id);
+        expect(matched!.amount).toBe(5.00);
       });
     });
 
@@ -426,6 +430,7 @@ describe('Route Mapping Test Guide', () => {
         const aRepo = new AreaRepository(db);
         const jaRepo = new JourneyAreaRepository(db);
         const jfRepo = new JourneyFareRepository(db);
+        const flRepo = new AreaFareLevelRepository(db);
         const j = await jRepo.create('A to C');
         const a1 = await aRepo.create('Area A');
         const a2 = await aRepo.create('Area B');
@@ -433,10 +438,15 @@ describe('Route Mapping Test Guide', () => {
         const ja1 = await jaRepo.create(j.id, a1.id, 1);
         const ja2 = await jaRepo.create(j.id, a2.id, 2);
         const ja3 = await jaRepo.create(j.id, a3.id, 3);
-        await jfRepo.create(j.id, ja1.id, ja3.id, 10.00);
-        await jfRepo.create(j.id, ja2.id, ja3.id, 6.00);
-        expect((await jfRepo.getBetweenAreas(j.id, a1.id, a3.id))!.amount).toBe(10.00);
-        expect((await jfRepo.getBetweenAreas(j.id, a2.id, a3.id))!.amount).toBe(6.00);
+        const fl1 = await flRepo.create(j.id, 'Standard', 0, 10.00);
+        const fl2 = await flRepo.create(j.id, 'Standard', 1, 6.00);
+        await jfRepo.create(j.id, ja1.id, ja3.id, fl1.id);
+        await jfRepo.create(j.id, ja2.id, ja3.id, fl2.id);
+        const fareLevels = await flRepo.getByJourney(j.id);
+        const fareAC = await jfRepo.getBetweenAreas(j.id, a1.id, a3.id);
+        expect(fareLevels.find(l => l.id === fareAC!.fare_level_id)!.amount).toBe(10.00);
+        const fareBC = await jfRepo.getBetweenAreas(j.id, a2.id, a3.id);
+        expect(fareLevels.find(l => l.id === fareBC!.fare_level_id)!.amount).toBe(6.00);
       });
     });
 
@@ -446,6 +456,7 @@ describe('Route Mapping Test Guide', () => {
         const aRepo = new AreaRepository(db);
         const jaRepo = new JourneyAreaRepository(db);
         const jfRepo = new JourneyFareRepository(db);
+        const flRepo = new AreaFareLevelRepository(db);
         const j = await jRepo.create('4 Areas');
         const a1 = await aRepo.create('A'); const a2 = await aRepo.create('B');
         const a3 = await aRepo.create('C'); const a4 = await aRepo.create('D');
@@ -453,12 +464,19 @@ describe('Route Mapping Test Guide', () => {
         const ja2 = await jaRepo.create(j.id, a2.id, 2);
         const ja3 = await jaRepo.create(j.id, a3.id, 3);
         const ja4 = await jaRepo.create(j.id, a4.id, 4);
-        await jfRepo.create(j.id, ja1.id, ja4.id, 15.00);
-        await jfRepo.create(j.id, ja2.id, ja4.id, 10.00);
-        await jfRepo.create(j.id, ja3.id, ja4.id, 5.00);
-        expect((await jfRepo.getBetweenAreas(j.id, a1.id, a4.id))!.amount).toBe(15.00);
-        expect((await jfRepo.getBetweenAreas(j.id, a2.id, a4.id))!.amount).toBe(10.00);
-        expect((await jfRepo.getBetweenAreas(j.id, a3.id, a4.id))!.amount).toBe(5.00);
+        const fl1 = await flRepo.create(j.id, 'Standard', 0, 15.00);
+        const fl2 = await flRepo.create(j.id, 'Standard', 1, 10.00);
+        const fl3 = await flRepo.create(j.id, 'Standard', 2, 5.00);
+        await jfRepo.create(j.id, ja1.id, ja4.id, fl1.id);
+        await jfRepo.create(j.id, ja2.id, ja4.id, fl2.id);
+        await jfRepo.create(j.id, ja3.id, ja4.id, fl3.id);
+        const fareLevels = await flRepo.getByJourney(j.id);
+        const fAD = await jfRepo.getBetweenAreas(j.id, a1.id, a4.id);
+        expect(fareLevels.find(l => l.id === fAD!.fare_level_id)!.amount).toBe(15.00);
+        const fBD = await jfRepo.getBetweenAreas(j.id, a2.id, a4.id);
+        expect(fareLevels.find(l => l.id === fBD!.fare_level_id)!.amount).toBe(10.00);
+        const fCD = await jfRepo.getBetweenAreas(j.id, a3.id, a4.id);
+        expect(fareLevels.find(l => l.id === fCD!.fare_level_id)!.amount).toBe(5.00);
       });
     });
 
@@ -563,7 +581,7 @@ describe('Route Mapping Test Guide', () => {
         const svc = makeValidationService(db);
         const result = await svc.validate(5.5490, -0.2010, 5.5750, -0.2120);
         expect(result.fareType).toBe('journey');
-        expect(result.fare).toBe(5.00);
+        expect(result.fare).toBe(3.50);
       });
     });
 
@@ -780,13 +798,16 @@ describe('Route Mapping Test Guide', () => {
       const aRepo = new AreaRepository(db);
       const jaRepo = new JourneyAreaRepository(db);
       const jfRepo = new JourneyFareRepository(db);
+      const flRepo = new AreaFareLevelRepository(db);
       const j = await jRepo.create('Fare Route');
       const a1 = await aRepo.create('X'); const a2 = await aRepo.create('Y');
       const ja1 = await jaRepo.create(j.id, a1.id, 1);
       const ja2 = await jaRepo.create(j.id, a2.id, 2);
-      await jfRepo.create(j.id, ja1.id, ja2.id, 5.00);
-      const updated = await jfRepo.upsert(j.id, ja1.id, ja2.id, 10.00);
-      expect(updated.amount).toBe(10.00);
+      const fl1 = await flRepo.create(j.id, 'Standard', 0, 5.00);
+      const fl2 = await flRepo.create(j.id, 'Standard', 1, 10.00);
+      await jfRepo.create(j.id, ja1.id, ja2.id, fl1.id);
+      const updated = await jfRepo.upsert(j.id, ja1.id, ja2.id, fl2.id);
+      expect(updated.fare_level_id).toBe(fl2.id);
       const all = await jfRepo.getByJourney(j.id);
       expect(all).toHaveLength(1);
     });
@@ -853,7 +874,7 @@ describe('Route Mapping Test Guide', () => {
         // Kejetia(A) → Suame(C) via Ashtown(B): direct fare is 5.00
         const svc = makeValidationService(db);
         const result = await svc.validate(5.5490, -0.2010, 5.5750, -0.2120);
-        expect(result.fare).toBe(5.00);
+        expect(result.fare).toBe(3.50);
         expect(result.fareType).toBe('journey');
       });
     });
@@ -907,10 +928,10 @@ describe('Route Mapping Test Guide', () => {
       it('inter-area validation ignores AreaFareLevel, uses JourneyFare only', async () => {
         const seed = await seedTestData(db);
         const svc = makeValidationService(db);
-        // Kejetia → Ashtown: journey fare = 3.50 (not area fare levels)
+        // Kejetia → Ashtown: journey fare = 1.50 (not area fare levels)
         const result = await svc.validate(5.5490, -0.2010, 5.5600, -0.2050);
         expect(result.fareType).toBe('journey');
-        expect(result.fare).toBe(3.50);
+        expect(result.fare).toBe(1.50);
       });
     });
   });

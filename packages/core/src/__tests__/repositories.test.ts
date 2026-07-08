@@ -584,6 +584,7 @@ describe('JourneyFareRepository', () => {
   let journeyRepo: JourneyRepository;
   let areaRepo: AreaRepository;
   let journeyAreaRepo: JourneyAreaRepository;
+  let fareLevelRepo: AreaFareLevelRepository;
 
   beforeEach(() => {
     db = getMemoryDatabase();
@@ -591,6 +592,7 @@ describe('JourneyFareRepository', () => {
     journeyRepo = new JourneyRepository(db);
     areaRepo = new AreaRepository(db);
     journeyAreaRepo = new JourneyAreaRepository(db);
+    fareLevelRepo = new AreaFareLevelRepository(db);
   });
 
   afterEach(() => {
@@ -608,25 +610,32 @@ describe('JourneyFareRepository', () => {
 
   it('creates a journey fare', async () => {
     const { journey, ja1, ja2 } = await setupJourneyAreas();
-    const fare = await repo.create(journey.id, ja1.id, ja2.id, 5.50);
-    expect(fare.amount).toBe(5.50);
+    const fl = await fareLevelRepo.create(journey.id, 'Standard', 0, 5.50);
+    const fare = await repo.create(journey.id, ja1.id, ja2.id, fl.id);
+    expect(fare.fare_level_id).toBe(fl.id);
     expect(fare.journey_id).toBe(journey.id);
   });
 
   it('getByJourney returns all fares for a journey', async () => {
     const { journey, ja1, ja2 } = await setupJourneyAreas();
-    await repo.create(journey.id, ja1.id, ja2.id, 3.00);
-    await repo.create(journey.id, ja2.id, ja1.id, 3.50);
+    const fl1 = await fareLevelRepo.create(journey.id, 'Standard', 0, 3.00);
+    const fl2 = await fareLevelRepo.create(journey.id, 'Standard', 1, 3.50);
+    await repo.create(journey.id, ja1.id, ja2.id, fl1.id);
+    await repo.create(journey.id, ja2.id, ja1.id, fl2.id);
     const fares = await repo.getByJourney(journey.id);
     expect(fares).toHaveLength(2);
   });
 
   it('getBetweenAreas finds fare by area ids', async () => {
     const { journey, a1, a2, ja1, ja2 } = await setupJourneyAreas();
-    await repo.create(journey.id, ja1.id, ja2.id, 5.50);
+    const fl = await fareLevelRepo.create(journey.id, 'Standard', 0, 5.50);
+    await repo.create(journey.id, ja1.id, ja2.id, fl.id);
     const fare = await repo.getBetweenAreas(journey.id, a1.id, a2.id);
     expect(fare).not.toBeNull();
-    expect(fare!.amount).toBe(5.50);
+    expect(fare!.fare_level_id).toBe(fl.id);
+    const levels = await fareLevelRepo.getByJourney(journey.id);
+    const matched = levels.find(l => l.id === fare!.fare_level_id);
+    expect(matched!.amount).toBe(5.50);
   });
 
   it('getBetweenAreas returns null for unconnected areas', async () => {
@@ -637,25 +646,29 @@ describe('JourneyFareRepository', () => {
 
   it('upsert inserts when no existing fare', async () => {
     const { journey, ja1, ja2 } = await setupJourneyAreas();
-    const fare = await repo.upsert(journey.id, ja1.id, ja2.id, 4.50);
-    expect(fare.amount).toBe(4.50);
+    const fl = await fareLevelRepo.create(journey.id, 'Standard', 0, 4.50);
+    const fare = await repo.upsert(journey.id, ja1.id, ja2.id, fl.id);
+    expect(fare.fare_level_id).toBe(fl.id);
     const fares = await repo.getByJourney(journey.id);
     expect(fares).toHaveLength(1);
   });
 
   it('upsert updates when fare exists', async () => {
     const { journey, ja1, ja2 } = await setupJourneyAreas();
-    await repo.create(journey.id, ja1.id, ja2.id, 2.00);
-    const updated = await repo.upsert(journey.id, ja1.id, ja2.id, 3.00);
-    expect(updated.amount).toBe(3.00);
+    const fl1 = await fareLevelRepo.create(journey.id, 'Standard', 0, 2.00);
+    await repo.create(journey.id, ja1.id, ja2.id, fl1.id);
+    const fl2 = await fareLevelRepo.create(journey.id, 'Standard', 1, 3.00);
+    const updated = await repo.upsert(journey.id, ja1.id, ja2.id, fl2.id);
+    expect(updated.fare_level_id).toBe(fl2.id);
     const fares = await repo.getByJourney(journey.id);
     expect(fares).toHaveLength(1);
-    expect(fares[0].amount).toBe(3.00);
+    expect(fares[0].fare_level_id).toBe(fl2.id);
   });
 
   it('delete removes fare', async () => {
     const { journey, ja1, ja2 } = await setupJourneyAreas();
-    const fare = await repo.create(journey.id, ja1.id, ja2.id, 5.00);
+    const fl = await fareLevelRepo.create(journey.id, 'Standard', 0, 5.00);
+    const fare = await repo.create(journey.id, ja1.id, ja2.id, fl.id);
     await repo.delete(fare.id);
     const fares = await repo.getByJourney(journey.id);
     expect(fares).toHaveLength(0);

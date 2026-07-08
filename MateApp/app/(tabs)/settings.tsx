@@ -1,8 +1,10 @@
+import { useRouter } from 'expo-router';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSettingsStore } from '@mateapp/core';
 
 export default function SettingsScreen() {
+  const router = useRouter();
   const { gpsInterval, minDistance, setGpsInterval, setMinDistance } = useSettingsStore();
 
   return (
@@ -69,6 +71,17 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.card}>
+          <Text style={styles.cardTitle}>Data Management</Text>
+          <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/manage')}>
+            <View style={styles.menuItemContent}>
+              <Text style={styles.menuItemTitle}>Manage Data</Text>
+              <Text style={styles.menuItemDesc}>Edit stops, areas, and fare levels</Text>
+            </View>
+            <Text style={styles.menuArrow}>›</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.card}>
           <Text style={styles.cardTitle}>About</Text>
           <View style={styles.aboutRow}>
             <Text style={styles.aboutLabel}>App</Text>
@@ -107,6 +120,15 @@ const styles = StyleSheet.create({
   controlValue: { fontSize: 18, fontWeight: '700', color: '#111827', marginHorizontal: 24, minWidth: 60, textAlign: 'center' },
   sliderLabels: { flexDirection: 'row', justifyContent: 'space-between' },
   sliderLabel: { fontSize: 11, color: '#9CA3AF' },
+  menuItem: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
+  },
+  menuItemContent: { flex: 1 },
+  menuItemTitle: { fontSize: 15, fontWeight: '600', color: '#111827', marginBottom: 2 },
+  menuItemDesc: { fontSize: 13, color: '#6B7280' },
+  menuArrow: { fontSize: 22, color: '#D1D5DB', marginLeft: 12 },
   aboutRow: {
     flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12,
     borderBottomWidth: 1, borderBottomColor: '#F3F4F6',

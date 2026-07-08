@@ -68,7 +68,7 @@ export class ExportService {
 
     // JourneyFares sheet
     const fares = await this.deps.journeyFareRepo.getByJourney(journeyId);
-    const fareRows = [['ID', 'From JA', 'To JA', 'Amount'], ...fares.map(f => [f.id, f.from_journey_area_id, f.to_journey_area_id, String(f.amount)] as string[])];
+    const fareRows = [['ID', 'From JA', 'To JA', 'Fare Level ID'], ...fares.map(f => [f.id, f.from_journey_area_id, f.to_journey_area_id, f.fare_level_id] as string[])];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(fareRows), 'Fares');
 
     // FareLevels sheet (journey-scoped)
@@ -92,12 +92,39 @@ export class ExportService {
         if (jaTo.sequence <= journeyAreas.find(ja => ja.area_id === area.id)!.sequence) continue;
         const fare = await this.deps.journeyFareRepo.getBetweenAreas(journeyId, area.id, jaTo.area_id);
         if (fare) {
+          const fl = fareLevels.find(l => l.id === fare.fare_level_id);
           const toName = areaNameMap.get(jaTo.area_id) || '';
-          summaryRows.push([area.name, toName, fare.amount.toFixed(2)]);
+          summaryRows.push([area.name, toName, fl ? fl.amount.toFixed(2) : '-']);
         }
       }
     }
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryRows), 'Fare Summary');
+
+    // Stop Fares sheet — per-stop fare levels within areas
+    const stopFareRows: string[][] = [['Area', 'Stop', 'Fare Level', 'Amount (GHS)']];
+    for (const area of areas) {
+      const areaStops = await this.deps.stopRepo.findByArea(area.id);
+      for (const stop of areaStops) {
+        const areaStopLink = await this.deps.areaStopRepo.getByAreaAndStop(area.id, stop.id);
+        const fl = areaStopLink?.fare_level_id
+          ? await this.deps.areaFareLevelRepo.getByAreaStop(areaStopLink.id)
+          : null;
+        stopFareRows.push([area.name, stop.label, fl?.label || '-', fl ? fl.amount.toFixed(2) : '-']);
+      }
+    }
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(stopFareRows), 'Stop Fares');
+
+    // Journey Fares sheet — inter-area fares only
+    const journeyFareRows: string[][] = [['From Area', 'To Area', 'Fare Level', 'Amount (GHS)']];
+    for (const f of fares) {
+      const fromJA = journeyAreas.find(ja => ja.id === f.from_journey_area_id);
+      const toJA = journeyAreas.find(ja => ja.id === f.to_journey_area_id);
+      const fl = fareLevels.find(l => l.id === f.fare_level_id);
+      const fromName = fromJA ? areaNameMap.get(fromJA.area_id) || '' : '';
+      const toName = toJA ? areaNameMap.get(toJA.area_id) || '' : '';
+      journeyFareRows.push([fromName, toName, fl?.label || '', fl ? fl.amount.toFixed(2) : '-']);
+    }
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(journeyFareRows), 'Journey Fares');
 
     // TrackPoints sheet
     const trackPoints = await this.deps.trackPointRepo.getByJourney(journeyId);
@@ -171,9 +198,9 @@ export class ExportService {
 
     const fares = await this.deps.journeyFareRepo.getByJourney(journeyId);
     if (fares.length > 0) {
-      lines.push('\nType,From JA ID,To JA ID,Amount');
+      lines.push('\nType,From JA ID,To JA ID,Fare Level ID');
       for (const f of fares) {
-        lines.push(`Fare,${escapeCsv(f.from_journey_area_id)},${escapeCsv(f.to_journey_area_id)},${f.amount}`);
+        lines.push(`Fare,${escapeCsv(f.from_journey_area_id)},${escapeCsv(f.to_journey_area_id)},${escapeCsv(f.fare_level_id)}`);
       }
     }
 

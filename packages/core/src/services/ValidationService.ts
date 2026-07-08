@@ -166,9 +166,17 @@ export class ValidationService {
 
   async getInterAreaFare(journeyId: string, pickupAreaId: string, destAreaId: string): Promise<number | null> {
     const fare = await this.deps.journeyFareRepo.getBetweenAreas(journeyId, pickupAreaId, destAreaId);
-    if (fare) return fare.amount;
+    if (fare) {
+      const levels = await this.deps.areaFareLevelRepo.getByJourney(journeyId);
+      const matched = levels.find(l => l.id === fare.fare_level_id);
+      if (matched) return matched.amount;
+    }
     const oppositeFare = await this.deps.journeyFareRepo.getBetweenAreas(journeyId, destAreaId, pickupAreaId);
-    if (oppositeFare) return oppositeFare.amount;
+    if (oppositeFare) {
+      const levels = await this.deps.areaFareLevelRepo.getByJourney(journeyId);
+      const matched = levels.find(l => l.id === oppositeFare.fare_level_id);
+      if (matched) return matched.amount;
+    }
     return null;
   }
 

@@ -118,8 +118,9 @@ describe('Integration: End-to-End Workflow', () => {
     expect(journeyAreas).toHaveLength(2);
 
     // Step 4: Set inter-area fares
-    await journeyFareRepo.create(journey.id, ja1.id, ja2.id, 7.00);
-    await journeyFareRepo.create(journey.id, ja2.id, ja1.id, 7.00);
+    const flInter1 = await fareLevelRepo.create(journey.id, 'Standard', 0, 7.00);
+    await journeyFareRepo.create(journey.id, ja1.id, ja2.id, flInter1.id);
+    await journeyFareRepo.create(journey.id, ja2.id, ja1.id, flInter1.id);
 
     const fares = await journeyFareRepo.getByJourney(journey.id);
     expect(fares).toHaveLength(2);
@@ -169,8 +170,9 @@ describe('Integration: End-to-End Workflow', () => {
     await areaStopRepo.create(area3.id, stop3a.id, fl3.id);
 
     const ja3 = await journeyAreaRepo.create(journey.id, area3.id, 3);
-    await journeyFareRepo.create(journey.id, ja2.id, ja3.id, 4.00);
-    await journeyFareRepo.create(journey.id, ja3.id, ja2.id, 4.00);
+    const flInter2 = await fareLevelRepo.create(journey.id, 'Standard', 0, 4.00);
+    await journeyFareRepo.create(journey.id, ja2.id, ja3.id, flInter2.id);
+    await journeyFareRepo.create(journey.id, ja3.id, ja2.id, flInter2.id);
 
     const allAreas = await journeyAreaRepo.getByJourney(journey.id);
     expect(allAreas).toHaveLength(3);

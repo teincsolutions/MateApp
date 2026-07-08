@@ -40,26 +40,26 @@ describe('ValidationService', () => {
   });
 
   describe('inter-area fare', () => {
-    it('resolves Kejetia(5.5490,-0.2010) → Suame(5.5750,-0.2120) as GHS 5.00', async () => {
+    it('resolves Kejetia(5.5490,-0.2010) → Suame(5.5750,-0.2120) as GHS 3.50', async () => {
       const result = await service.validate(5.5490, -0.2010, 5.5750, -0.2120);
       expect(result.status).toBe('success');
-      expect(result.fare).toBe(5.00);
+      expect(result.fare).toBe(3.50);
       expect(result.fareType).toBe('journey');
       expect(result.journey).not.toBeNull();
       expect(result.journey!.name).toBe('Kejetia ↔ Suame');
     });
 
-    it('resolves Kejetia(5.5490,-0.2010) → Ashtown(5.5600,-0.2050) as GHS 3.50', async () => {
+    it('resolves Kejetia(5.5490,-0.2010) → Ashtown(5.5600,-0.2050) as GHS 1.50', async () => {
       const result = await service.validate(5.5490, -0.2010, 5.5600, -0.2050);
       expect(result.status).toBe('success');
-      expect(result.fare).toBe(3.50);
+      expect(result.fare).toBe(1.50);
       expect(result.fareType).toBe('journey');
     });
 
-    it('resolves Ashtown(5.5600,-0.2050) → Suame(5.5750,-0.2120) as GHS 3.00', async () => {
+    it('resolves Ashtown(5.5600,-0.2050) → Suame(5.5750,-0.2120) as GHS 2.00', async () => {
       const result = await service.validate(5.5600, -0.2050, 5.5750, -0.2120);
       expect(result.status).toBe('success');
-      expect(result.fare).toBe(3.00);
+      expect(result.fare).toBe(2.00);
       expect(result.fareType).toBe('journey');
     });
   });
@@ -87,7 +87,7 @@ describe('ValidationService', () => {
     it('resolves Dest→Pickup (reverse direction)', async () => {
       const result = await service.validate(5.5750, -0.2120, 5.5490, -0.2010);
       expect(result.status).toBe('success');
-      expect(result.fare).toBe(5.00);
+      expect(result.fare).toBe(3.50);
       expect(result.fareType).toBe('journey');
     });
 
@@ -188,7 +188,7 @@ describe('ValidationService', () => {
       const result = await service.validate(5.5490, -0.2010, 5.5750, -0.2120);
       expect(result.status).toBe('success');
       expect(result.message).toContain('GHS');
-      expect(result.message).toContain('5.00');
+      expect(result.message).toContain('3.50');
     });
   });
 });
