@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Location from 'expo-location';
 import { validateFare } from '../../adapters/index';
 import { ValidationResult } from '@mateapp/core';
 
@@ -11,6 +12,24 @@ export default function ValidateScreen() {
   const [destLng, setDestLng] = useState('');
   const [result, setResult] = useState<ValidationResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [pickingLocation, setPickingLocation] = useState<'pickup' | 'dest' | null>(null);
+
+  const handlePickLocation = async (type: 'pickup' | 'dest') => {
+    setPickingLocation(type);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      if (type === 'pickup') {
+        setPickupLat(pos.coords.latitude.toFixed(6));
+        setPickupLng(pos.coords.longitude.toFixed(6));
+      } else {
+        setDestLat(pos.coords.latitude.toFixed(6));
+        setDestLng(pos.coords.longitude.toFixed(6));
+      }
+    } catch {}
+    setPickingLocation(null);
+  };
 
   const handleValidate = async () => {
     const pLat = parseFloat(pickupLat);
@@ -34,58 +53,40 @@ export default function ValidateScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.title}>Validate Fare</Text>
-        <Text style={styles.subtitle}>Enter pickup and destination coordinates to find the journey and fare.</Text>
+        <Text style={styles.subtitle}>Enter pickup and destination coordinates or use current location.</Text>
 
-        <Text style={styles.sectionLabel}>Pickup Location</Text>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionLabel}>Pickup Location</Text>
+          <TouchableOpacity style={styles.locationBtn} onPress={() => handlePickLocation('pickup')} disabled={pickingLocation !== null}>
+            {pickingLocation === 'pickup' ? (
+              <ActivityIndicator color="#2563EB" size="small" />
+            ) : (
+              <Text style={styles.locationBtnText}>Use Current</Text>
+            )}
+          </TouchableOpacity>
+        </View>
         <View style={styles.coordRow}>
-          <TextInput
-            style={styles.coordInput}
-            value={pickupLat}
-            onChangeText={setPickupLat}
-            placeholder="Latitude"
-            placeholderTextColor="#9CA3AF"
-            keyboardType="decimal-pad"
-          />
-          <TextInput
-            style={styles.coordInput}
-            value={pickupLng}
-            onChangeText={setPickupLng}
-            placeholder="Longitude"
-            placeholderTextColor="#9CA3AF"
-            keyboardType="decimal-pad"
-          />
+          <TextInput style={styles.coordInput} value={pickupLat} onChangeText={setPickupLat} placeholder="Latitude" placeholderTextColor="#9CA3AF" keyboardType="decimal-pad" />
+          <TextInput style={styles.coordInput} value={pickupLng} onChangeText={setPickupLng} placeholder="Longitude" placeholderTextColor="#9CA3AF" keyboardType="decimal-pad" />
         </View>
 
-        <Text style={styles.sectionLabel}>Destination</Text>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionLabel}>Destination</Text>
+          <TouchableOpacity style={styles.locationBtn} onPress={() => handlePickLocation('dest')} disabled={pickingLocation !== null}>
+            {pickingLocation === 'dest' ? (
+              <ActivityIndicator color="#2563EB" size="small" />
+            ) : (
+              <Text style={styles.locationBtnText}>Use Current</Text>
+            )}
+          </TouchableOpacity>
+        </View>
         <View style={styles.coordRow}>
-          <TextInput
-            style={styles.coordInput}
-            value={destLat}
-            onChangeText={setDestLat}
-            placeholder="Latitude"
-            placeholderTextColor="#9CA3AF"
-            keyboardType="decimal-pad"
-          />
-          <TextInput
-            style={styles.coordInput}
-            value={destLng}
-            onChangeText={setDestLng}
-            placeholder="Longitude"
-            placeholderTextColor="#9CA3AF"
-            keyboardType="decimal-pad"
-          />
+          <TextInput style={styles.coordInput} value={destLat} onChangeText={setDestLat} placeholder="Latitude" placeholderTextColor="#9CA3AF" keyboardType="decimal-pad" />
+          <TextInput style={styles.coordInput} value={destLng} onChangeText={setDestLng} placeholder="Longitude" placeholderTextColor="#9CA3AF" keyboardType="decimal-pad" />
         </View>
 
-        <TouchableOpacity
-          style={[styles.button, !canValidate && styles.buttonDisabled]}
-          onPress={handleValidate}
-          disabled={!canValidate || loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Validate</Text>
-          )}
+        <TouchableOpacity style={[styles.button, !canValidate && styles.buttonDisabled]} onPress={handleValidate} disabled={!canValidate || loading}>
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Validate</Text>}
         </TouchableOpacity>
 
         {result && (
@@ -95,7 +96,6 @@ export default function ValidateScreen() {
                 {result.status === 'success' ? 'Success' : result.status === 'journey_not_found' ? 'Journey Not Found' : 'Unknown'}
               </Text>
             </View>
-
             {result.journey && (
               <View style={styles.resultRow}>
                 <Text style={styles.resultLabel}>Journey</Text>
@@ -105,10 +105,7 @@ export default function ValidateScreen() {
             {result.pickupStop && (
               <View style={styles.resultRow}>
                 <Text style={styles.resultLabel}>Pickup Stop</Text>
-                <Text style={styles.resultValue}>
-                  {result.pickupStop.label}
-                  {result.estimatedPickup ? ' (estimated)' : ''}
-                </Text>
+                <Text style={styles.resultValue}>{result.pickupStop.label}{result.estimatedPickup ? ' (estimated)' : ''}</Text>
               </View>
             )}
             {result.pickupArea && (
@@ -120,10 +117,7 @@ export default function ValidateScreen() {
             {result.destStop && (
               <View style={styles.resultRow}>
                 <Text style={styles.resultLabel}>Dest Stop</Text>
-                <Text style={styles.resultValue}>
-                  {result.destStop.label}
-                  {result.estimatedDest ? ' (estimated)' : ''}
-                </Text>
+                <Text style={styles.resultValue}>{result.destStop.label}{result.estimatedDest ? ' (estimated)' : ''}</Text>
               </View>
             )}
             {result.destArea && (
@@ -160,7 +154,10 @@ const styles = StyleSheet.create({
   scroll: { padding: 20 },
   title: { fontSize: 28, fontWeight: '700', color: '#111827', marginBottom: 8, marginTop: 10 },
   subtitle: { fontSize: 15, color: '#6B7280', marginBottom: 24 },
-  sectionLabel: { fontSize: 14, fontWeight: '600', color: '#374151', marginBottom: 8, marginTop: 8 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, marginTop: 8 },
+  sectionLabel: { fontSize: 14, fontWeight: '600', color: '#374151' },
+  locationBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: '#EBF5FF' },
+  locationBtnText: { fontSize: 13, fontWeight: '600', color: '#2563EB' },
   coordRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   coordInput: {
     flex: 1, backgroundColor: '#fff', borderRadius: 12, padding: 14, fontSize: 15,
