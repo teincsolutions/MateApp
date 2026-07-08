@@ -1,0 +1,11 @@
+{
+  "name": "@mateapp/core",
+  "version": "1.0.0",
+  "main": "src/index.ts",
+  "private": true,
+  "dependencies": {
+    "xlsx": "^0.18.5",
+    "zustand": "^5.0.14",
+    "uuid": "^14.0.1"
+  }
+}

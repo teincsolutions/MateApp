@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "@mateapp/core": ["./src/index.ts"],
+      "@mateapp/core/*": ["./src/*"]
+    }
+  },
+  "include": ["src/**/*"]
+}

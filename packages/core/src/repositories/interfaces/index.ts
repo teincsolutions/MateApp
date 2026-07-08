@@ -1,0 +1,9 @@
+export type { IJourneyRepository } from './IJourneyRepository';
+export type { IAreaRepository } from './IAreaRepository';
+export type { IStopRepository } from './IStopRepository';
+export type { IAreaFareLevelRepository } from './IAreaFareLevelRepository';
+export type { IAreaStopRepository } from './IAreaStopRepository';
+export type { IJourneyAreaRepository } from './IJourneyAreaRepository';
+export type { IJourneyFareRepository } from './IJourneyFareRepository';
+export type { ITrackPointRepository } from './ITrackPointRepository';
+export type { IValidationLogRepository } from './IValidationLogRepository';

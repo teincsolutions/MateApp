@@ -1,0 +1,11 @@
+{
+  "name": "@mateapp/db-sqlite",
+  "version": "1.0.0",
+  "main": "src/index.ts",
+  "private": true,
+  "dependencies": {
+    "@mateapp/core": "*",
+    "expo-sqlite": "~57.0.0",
+    "uuid": "^14.0.1"
+  }
+}
