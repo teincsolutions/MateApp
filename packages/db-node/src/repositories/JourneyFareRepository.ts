@@ -1,6 +1,6 @@
 import type { IJourneyFareRepository, JourneyFare } from '@mateapp/core';
 import type Database from 'better-sqlite3';
-import { v4 as uuidv4 } from 'uuid';
+import { uuidv4 } from '@mateapp/core';
 
 export class JourneyFareRepository implements IJourneyFareRepository {
   constructor(private db: Database.Database) {}

@@ -1,6 +1,6 @@
 import type { ITrackPointRepository, TrackPoint } from '@mateapp/core';
 import { getDatabase } from '../database';
-import { v4 as uuidv4 } from 'uuid';
+import { uuidv4 } from '@mateapp/core';
 
 export class TrackPointRepository implements ITrackPointRepository {
   async create(journeyId: string, journeyAreaId: string | null, sequence: number, latitude: number, longitude: number): Promise<TrackPoint> {

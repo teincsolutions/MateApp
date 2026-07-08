@@ -1,6 +1,6 @@
 import type { IAreaFareLevelRepository, AreaFareLevel } from '@mateapp/core';
 import { getDatabase } from '../database';
-import { v4 as uuidv4 } from 'uuid';
+import { uuidv4 } from '@mateapp/core';
 
 export class AreaFareLevelRepository implements IAreaFareLevelRepository {
   async create(areaId: string, label: string, orderNo: number, amount: number): Promise<AreaFareLevel> {

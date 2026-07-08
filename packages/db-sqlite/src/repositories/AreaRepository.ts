@@ -1,6 +1,6 @@
 import type { IAreaRepository, Area } from '@mateapp/core';
 import { getDatabase } from '../database';
-import { v4 as uuidv4 } from 'uuid';
+import { uuidv4 } from '@mateapp/core';
 
 export class AreaRepository implements IAreaRepository {
   async create(name: string): Promise<Area> {

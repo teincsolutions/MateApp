@@ -1,6 +1,6 @@
 import type { IJourneyRepository, Journey } from '@mateapp/core';
 import { getDatabase } from '../database';
-import { v4 as uuidv4 } from 'uuid';
+import { uuidv4 } from '@mateapp/core';
 
 export class JourneyRepository implements IJourneyRepository {
   async create(name: string, startAreaId?: string): Promise<Journey> {

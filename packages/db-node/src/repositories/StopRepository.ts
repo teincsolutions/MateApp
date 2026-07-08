@@ -1,6 +1,6 @@
 import type { IStopRepository, Stop } from '@mateapp/core';
 import type Database from 'better-sqlite3';
-import { v4 as uuidv4 } from 'uuid';
+import { uuidv4 } from '@mateapp/core';
 
 function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371000;

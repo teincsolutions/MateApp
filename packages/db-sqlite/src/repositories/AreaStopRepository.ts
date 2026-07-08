@@ -1,6 +1,6 @@
 import type { IAreaStopRepository, AreaStop } from '@mateapp/core';
 import { getDatabase } from '../database';
-import { v4 as uuidv4 } from 'uuid';
+import { uuidv4 } from '@mateapp/core';
 
 export class AreaStopRepository implements IAreaStopRepository {
   async create(areaId: string, stopId: string, fareLevelId?: string): Promise<AreaStop> {

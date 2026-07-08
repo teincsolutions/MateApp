@@ -1,6 +1,6 @@
 import type { IValidationLogRepository, ValidationLog } from '@mateapp/core';
 import { getDatabase } from '../database';
-import { v4 as uuidv4 } from 'uuid';
+import { uuidv4 } from '@mateapp/core';
 
 export class ValidationLogRepository implements IValidationLogRepository {
   async create(data: {

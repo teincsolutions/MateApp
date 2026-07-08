@@ -1,6 +1,6 @@
 import type { IAreaStopRepository, AreaStop } from '@mateapp/core';
 import type Database from 'better-sqlite3';
-import { v4 as uuidv4 } from 'uuid';
+import { uuidv4 } from '@mateapp/core';
 
 export class AreaStopRepository implements IAreaStopRepository {
   constructor(private db: Database.Database) {}
