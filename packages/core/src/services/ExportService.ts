@@ -76,6 +76,29 @@ export class ExportService {
     const lvlRows = [['ID', 'Journey ID', 'Label', 'Order', 'Amount'], ...fareLevels.map(lvl => [lvl.id, lvl.journey_id, lvl.label, String(lvl.order_no), String(lvl.amount)] as string[])];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(lvlRows), 'FareLevels');
 
+    // Fare Summary sheet — human-readable unified view
+    const summaryRows: string[][] = [['Area', 'Stops / Destination', 'Fare (GHS)']];
+    for (const area of areas) {
+      const areaStops = await this.deps.stopRepo.findByArea(area.id);
+      for (const stop of areaStops) {
+        const areaStopLink = await this.deps.areaStopRepo.getByAreaAndStop(area.id, stop.id);
+        const fl = areaStopLink?.fare_level_id
+          ? await this.deps.areaFareLevelRepo.getByAreaStop(areaStopLink.id)
+          : null;
+        summaryRows.push([area.name, stop.label, fl ? fl.amount.toFixed(2) : '-']);
+      }
+      // Add inter-area fares from this area to later areas
+      for (const jaTo of journeyAreas) {
+        if (jaTo.sequence <= journeyAreas.find(ja => ja.area_id === area.id)!.sequence) continue;
+        const fare = await this.deps.journeyFareRepo.getBetweenAreas(journeyId, area.id, jaTo.area_id);
+        if (fare) {
+          const toName = areaNameMap.get(jaTo.area_id) || '';
+          summaryRows.push([area.name, toName, fare.amount.toFixed(2)]);
+        }
+      }
+    }
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryRows), 'Fare Summary');
+
     // TrackPoints sheet
     const trackPoints = await this.deps.trackPointRepo.getByJourney(journeyId);
     const tpRows = [['ID', 'Sequence', 'Latitude', 'Longitude', 'Created'], ...trackPoints.map(tp => [tp.id, String(tp.sequence), String(tp.latitude), String(tp.longitude), tp.created_at] as string[])];
