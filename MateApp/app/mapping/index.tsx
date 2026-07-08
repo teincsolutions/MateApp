@@ -2,23 +2,24 @@ import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Alert, Modal,
-  TextInput, ScrollView, Platform,
+  TextInput, ScrollView, Platform, ActivityIndicator,
 } from 'react-native';
 import MapView, { Marker, Polyline, Polygon, PROVIDER_DEFAULT } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 
 import { JourneyRepository, AreaRepository, StopRepository, AreaStopRepository, JourneyAreaRepository, JourneyFareRepository, AreaFareLevelRepository, TrackPointRepository } from '../../adapters/index';
-import { GeometryService, LatLng, useJourneyStore, useMappingStore, useSettingsStore, Journey, Area, Stop, JourneyArea as JA, TrackPoint } from '@mateapp/core';
+import { GeometryService, LatLng, useJourneyStore, useMappingStore, useSettingsStore, Journey, Area, Stop, JourneyArea as JA, TrackPoint, AreaFareLevel } from '@mateapp/core';
 
 export default function MappingScreen() {
   const router = useRouter();
   const { journeyId } = useLocalSearchParams<{ journeyId: string }>();
   const mapRef = useRef<MapView>(null);
   const locationSub = useRef<Location.LocationSubscription | null>(null);
+  const trackIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { activeJourney, activeJourneyArea, setActiveJourney, setActiveJourneyArea, setIsTracking } = useJourneyStore();
-  const { currentLocation, trackPoints, trackSequence, setCurrentLocation, addTrackPoint, setTrackSequence, setIsRecording, reset: resetMapping } = useMappingStore();
+  const { currentLocation, trackPoints, trackSequence, setCurrentLocation, addTrackPoint, setTrackSequence, setIsRecording, isRecording, reset: resetMapping } = useMappingStore();
   const { gpsInterval, minDistance } = useSettingsStore();
 
   const [journey, setJourney] = useState<Journey | null>(null);
@@ -31,9 +32,13 @@ export default function MappingScreen() {
   const [showStopModal, setShowStopModal] = useState(false);
   const [newAreaName, setNewAreaName] = useState('');
   const [stopLabel, setStopLabel] = useState('');
+  const [selectedFareLevelId, setSelectedFareLevelId] = useState<string | null>(null);
   const [fareAmounts, setFareAmounts] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(false);
   const [suggestedArea, setSuggestedArea] = useState<Area | null>(null);
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
+  const [pendingAreaBeforeFares, setPendingAreaBeforeFares] = useState<Area | false>(false);
+  const [areaFareLevels, setAreaFareLevels] = useState<AreaFareLevel[]>([]);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
 
   const loadJourney = useCallback(async () => {
     if (!journeyId) return;
@@ -69,11 +74,12 @@ export default function MappingScreen() {
     const maxSeq = tps.length > 0 ? Math.max(...tps.map(t => t.sequence)) : 0;
     setTrackSequence(maxSeq);
 
-    const existingTps = await TrackPointRepository.getByJourney(j.id);
-    for (const tp of existingTps) {
+    for (const tp of tps) {
       addTrackPoint(tp);
     }
     setIsTracking(true);
+    setIsRecording(true);
+    setInitialLoadDone(true);
   }, [journeyId]);
 
   useFocusEffect(
@@ -84,9 +90,22 @@ export default function MappingScreen() {
           locationSub.current.remove();
           locationSub.current = null;
         }
+        if (trackIntervalRef.current) {
+          clearInterval(trackIntervalRef.current);
+          trackIntervalRef.current = null;
+        }
       };
     }, [loadJourney])
   );
+
+  // Gap #1: Auto-create first area when mapping starts with no areas
+  useEffect(() => {
+    if (!initialLoadDone || !journey || journeyAreas.length > 0 || !currentLocation) return;
+    setNewAreaName('');
+    setSuggestedArea(null);
+    const timer = setTimeout(() => setShowNewAreaModal(true), 500);
+    return () => clearTimeout(timer);
+  }, [initialLoadDone, journey?.id, journeyAreas.length, currentLocation]);
 
   useEffect(() => {
     if (!journey) return;
@@ -96,12 +115,16 @@ export default function MappingScreen() {
         Alert.alert('Permission needed', 'Location permission is required for mapping.');
         return;
       }
+      if (locationSub.current) {
+        locationSub.current.remove();
+      }
       locationSub.current = await Location.watchPositionAsync(
         { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: minDistance, timeInterval: gpsInterval },
         async (pos) => {
           const loc = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
           setCurrentLocation(loc);
-          if (journey) {
+          setGpsAccuracy(pos.coords.accuracy || null);
+          if (journey && isRecording) {
             const seq = await TrackPointRepository.getMaxSequence(journey.id);
             const currentJA = journeyAreas.length > 0 ? journeyAreas[journeyAreas.length - 1] : null;
             await TrackPointRepository.create(journey.id, currentJA?.id || null, seq + 1, loc.latitude, loc.longitude);
@@ -116,7 +139,7 @@ export default function MappingScreen() {
         locationSub.current = null;
       }
     };
-  }, [journey?.id, gpsInterval, minDistance]);
+  }, [journey?.id, gpsInterval, minDistance, isRecording]);
 
   const handleAddStop = async () => {
     if (!currentLocation || !activeJourneyArea) {
@@ -136,6 +159,10 @@ export default function MappingScreen() {
       await refreshStops();
       return;
     }
+    // Gap #2: Load fare levels for current area
+    const levels = await AreaFareLevelRepository.getByArea(activeJourneyArea.area.id);
+    setAreaFareLevels(levels);
+    setSelectedFareLevelId(levels.length > 0 ? levels[0].id : null);
     setStopLabel('');
     setShowStopModal(true);
   };
@@ -144,13 +171,14 @@ export default function MappingScreen() {
     const label = stopLabel.trim();
     if (!label) return;
     setShowStopModal(false);
-    await createStop(label);
+    await createStop(label, selectedFareLevelId);
   };
 
-  const createStop = async (label: string) => {
+  const createStop = async (label: string, fareLevelId: string | null) => {
     if (!currentLocation || !activeJourneyArea) return;
     const stop = await StopRepository.create(label, currentLocation.latitude, currentLocation.longitude);
-    await AreaStopRepository.create(activeJourneyArea.area.id, stop.id);
+    // Gap #2: Pass fare level when creating area-stop link
+    await AreaStopRepository.create(activeJourneyArea.area.id, stop.id, fareLevelId || undefined);
     await updateAreaPolygon(activeJourneyArea.area.id);
     await refreshStops();
     Alert.alert('Stop Created', `Stop "${label}" added to ${activeJourneyArea.area.name}`);
@@ -167,16 +195,36 @@ export default function MappingScreen() {
     }
   };
 
+  // Gap #3: Enforce fare entry before new area
   const handleNewArea = async () => {
     if (!currentLocation) {
       Alert.alert('Error', 'GPS location not available.');
       return;
     }
+    // Enforce: if journey areas exist, prompt fares first
+    if (journeyAreas.length >= 1 && activeJourneyArea) {
+      const pendingCheck = async () => {
+        if (journeyAreas.length < 2) {
+          // First new area — no fares needed yet
+          return proceedToAreaCreation();
+        }
+        // Check if fares exist from all previous areas to the pending new area
+        // Open fare modal first, then after saving, proceed
+        setPendingAreaBeforeFares(null as any);
+        handleEnterFares(() => proceedToAreaCreation());
+      };
+      pendingCheck();
+      return;
+    }
+    proceedToAreaCreation();
+  };
+
+  const proceedToAreaCreation = async () => {
     const areasWithPolygons = await AreaRepository.getAllWithPolygons();
     for (const area of areasWithPolygons) {
       if (area.polygon) {
         const polygon = GeometryService.polygonFromJson(area.polygon);
-        if (GeometryService.pointInPolygon(currentLocation, polygon)) {
+        if (GeometryService.pointInPolygon(currentLocation!, polygon)) {
           setSuggestedArea(area);
           setShowNewAreaModal(true);
           return;
@@ -192,6 +240,7 @@ export default function MappingScreen() {
     const name = newAreaName.trim();
     let area: Area;
 
+    // Gap #1: First stop auto-created at current GPS
     if (suggestedArea) {
       area = suggestedArea;
     } else {
@@ -200,21 +249,36 @@ export default function MappingScreen() {
         return;
       }
       area = await AreaRepository.create(name);
-      setSuggestedArea(null);
     }
 
     const seq = journeyAreas.length + 1;
     const ja = await JourneyAreaRepository.create(journey.id, area.id, seq);
-    const stop = await StopRepository.create(
-      suggestedArea ? `${area.name} Stop` : `${name} Stop`,
-      currentLocation.latitude,
-      currentLocation.longitude
-    );
-    await AreaStopRepository.create(area.id, stop.id);
+
+    // Auto-create first stop at current GPS (business rule AR-001)
+    const existingStops = await StopRepository.findByRadius(currentLocation.latitude, currentLocation.longitude, 50);
+    let stop: Stop;
+    if (existingStops.length > 0) {
+      stop = existingStops[0];
+    } else {
+      stop = await StopRepository.create(
+        suggestedArea ? `${area.name} Stop` : `${name || area.name} Stop`,
+        currentLocation.latitude,
+        currentLocation.longitude
+      );
+    }
+    // Check if already linked, if not link it
+    const existingLink = await AreaStopRepository.getByAreaAndStop(area.id, stop.id);
+    if (!existingLink) {
+      await AreaStopRepository.create(area.id, stop.id);
+    }
+    await updateAreaPolygon(area.id);
+
     setActiveJourneyArea({ area, journeyAreaId: ja.id, sequence: seq });
     await JourneyRepository.updateStatus(journey.id, 'draft');
     setShowNewAreaModal(false);
     setNewAreaName('');
+    setSuggestedArea(null);
+    setPendingAreaBeforeFares(false);
 
     await loadJourney();
     Alert.alert('Area Created', `Now in area: ${area.name}`);
@@ -226,18 +290,20 @@ export default function MappingScreen() {
     const ja = await JourneyAreaRepository.create(journey.id, suggestedArea.id, seq);
 
     const existingStops = await StopRepository.findByRadius(currentLocation.latitude, currentLocation.longitude, 50);
+    let stop: Stop;
     if (existingStops.length === 0) {
-      const stop = await StopRepository.create(`${suggestedArea.name} Stop`, currentLocation.latitude, currentLocation.longitude);
+      stop = await StopRepository.create(`${suggestedArea.name} Stop`, currentLocation.latitude, currentLocation.longitude);
       await AreaStopRepository.create(suggestedArea.id, stop.id);
     }
     setActiveJourneyArea({ area: suggestedArea, journeyAreaId: ja.id, sequence: seq });
     setShowNewAreaModal(false);
     setSuggestedArea(null);
+    setPendingAreaBeforeFares(false);
     await loadJourney();
     Alert.alert('Area Reused', `Using existing area: ${suggestedArea.name}`);
   };
 
-  const handleEnterFares = () => {
+  const handleEnterFares = (afterSave?: () => void) => {
     if (journeyAreas.length < 2) {
       Alert.alert('Not Ready', 'Need at least 2 areas to set fares.');
       return;
@@ -249,9 +315,15 @@ export default function MappingScreen() {
       }
       setFareAmounts(initialFares);
       setShowFareModal(true);
+      if (afterSave) {
+        (handleSaveFares as any)._afterSave = afterSave;
+      }
     }).catch(() => {
       setFareAmounts(initialFares);
       setShowFareModal(true);
+      if (afterSave) {
+        (handleSaveFares as any)._afterSave = afterSave;
+      }
     });
   };
 
@@ -267,10 +339,20 @@ export default function MappingScreen() {
       }
     }
     setShowFareModal(false);
+    const afterSave = (handleSaveFares as any)._afterSave;
+    (handleSaveFares as any)._afterSave = null;
+    if (afterSave) {
+      afterSave();
+    }
     Alert.alert('Fares Saved', 'Journey fares have been updated.');
   };
 
+  // Gap #9: Minimum 2 areas required
   const handleFinishJourney = () => {
+    if (journeyAreas.length < 2) {
+      Alert.alert('Cannot Complete', 'A journey must have at least 2 areas before it can be completed.');
+      return;
+    }
     Alert.alert('Finish Journey', 'Complete this journey? You can reopen it later.', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -282,6 +364,7 @@ export default function MappingScreen() {
             locationSub.current = null;
           }
           setIsTracking(false);
+          setIsRecording(false);
           const lastArea = journeyAreas.length > 0 ? journeyAreas[journeyAreas.length - 1] : null;
           await JourneyRepository.updateStatus(journey.id, 'completed', lastArea?.area_id || undefined);
           resetMapping();
@@ -291,6 +374,16 @@ export default function MappingScreen() {
         },
       },
     ]);
+  };
+
+  // Gap #4: Pause/Resume mapping
+  const handlePauseResume = () => {
+    if (isRecording) {
+      setIsRecording(false);
+      Alert.alert('Mapping Paused', 'GPS tracking paused. Tap Resume to continue.');
+    } else {
+      setIsRecording(true);
+    }
   };
 
   const refreshStops = async () => {
@@ -314,10 +407,24 @@ export default function MappingScreen() {
           <Text style={styles.backBtn}>Back</Text>
         </TouchableOpacity>
         <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle} numberOfLines={1}>{journey?.name || 'Journey'}</Text>
-          <Text style={styles.headerArea} numberOfLines={1}>
-            {activeJourneyArea ? activeJourneyArea.area.name : 'No area'}
-          </Text>
+          <View style={styles.headerTitleRow}>
+            <Text style={styles.headerTitle} numberOfLines={1}>{journey?.name || 'Journey'}</Text>
+            {/* Gap #6: Tracking indicator */}
+            {isRecording && (
+              <View style={styles.recordingDot} />
+            )}
+          </View>
+          <View style={styles.headerSubRow}>
+            <Text style={styles.headerArea} numberOfLines={1}>
+              {activeJourneyArea ? activeJourneyArea.area.name : 'No area'}
+            </Text>
+            {/* Gap #5: GPS accuracy */}
+            {gpsAccuracy !== null && (
+              <Text style={styles.gpsAccuracy}>
+                ±{gpsAccuracy.toFixed(1)}m
+              </Text>
+            )}
+          </View>
         </View>
       </View>
 
@@ -368,18 +475,31 @@ export default function MappingScreen() {
         <TouchableOpacity style={styles.actionBtn} onPress={handleNewArea}>
           <Text style={styles.actionBtnText}>New Area</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtn} onPress={handleEnterFares}>
+        <TouchableOpacity style={styles.actionBtn} onPress={() => handleEnterFares()}>
           <Text style={styles.actionBtnText}>Fares</Text>
+        </TouchableOpacity>
+        {/* Gap #4: Pause/Resume */}
+        <TouchableOpacity
+          style={[styles.actionBtn, !isRecording && styles.actionBtnPaused]}
+          onPress={handlePauseResume}
+        >
+          <Text style={styles.actionBtnText}>{isRecording ? 'Pause' : 'Resume'}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionBtnDanger} onPress={handleFinishJourney}>
           <Text style={styles.actionBtnTextDanger}>Finish</Text>
         </TouchableOpacity>
       </View>
 
+      {/* New Area Modal */}
       <Modal visible={showNewAreaModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>New Area</Text>
+            <Text style={styles.modalTitle}>
+              {journeyAreas.length === 0 ? 'Create First Area' : 'New Area'}
+            </Text>
+            {journeyAreas.length === 0 && (
+              <Text style={styles.modalHint}>Start by naming the area at your current location.</Text>
+            )}
             {suggestedArea ? (
               <>
                 <Text style={styles.modalText}>Existing area found: <Text style={styles.bold}>{suggestedArea.name}</Text></Text>
@@ -392,7 +512,11 @@ export default function MappingScreen() {
               </>
             ) : (
               <>
-                <Text style={styles.modalText}>Enter a name for the new area at your current location.</Text>
+                <Text style={styles.modalText}>
+                  {journeyAreas.length === 0
+                    ? 'Enter a name for your first area. A stop will be created automatically at your GPS location.'
+                    : 'Enter a name for the new area at your current location.'}
+                </Text>
                 <TextInput
                   style={styles.modalInput}
                   value={newAreaName}
@@ -417,10 +541,12 @@ export default function MappingScreen() {
         </View>
       </Modal>
 
+      {/* Fare Entry Modal */}
       <Modal visible={showFareModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Enter Fares</Text>
+            <Text style={styles.modalText}>Set inter-area fares. Fares are bidirectional.</Text>
             <ScrollView style={styles.fareScroll}>
               {journeyAreas.map((jaFrom, i) =>
                 journeyAreas.slice(i + 1).map((jaTo) => {
@@ -453,20 +579,47 @@ export default function MappingScreen() {
         </View>
       </Modal>
 
+      {/* Stop Modal with Fare Level picker (Gap #2) */}
       <Modal visible={showStopModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Add Stop</Text>
             <Text style={styles.modalText}>Enter a label for this stop at your current location.</Text>
+            <Text style={styles.modalLabel}>Stop Label</Text>
             <TextInput
               style={styles.modalInput}
               value={stopLabel}
               onChangeText={setStopLabel}
-              placeholder="Stop label (e.g. Main Station)"
+              placeholder="e.g. Main Station"
               placeholderTextColor="#9CA3AF"
               autoFocus
               onSubmitEditing={handleCreateStopFromModal}
             />
+            {/* Fare Level picker */}
+            {areaFareLevels.length > 0 && (
+              <>
+                <Text style={styles.modalLabel}>Fare Level</Text>
+                <View style={styles.fareLevelList}>
+                  {areaFareLevels.map((fl) => (
+                    <TouchableOpacity
+                      key={fl.id}
+                      style={[
+                        styles.fareLevelChip,
+                        selectedFareLevelId === fl.id && styles.fareLevelChipSelected,
+                      ]}
+                      onPress={() => setSelectedFareLevelId(fl.id)}
+                    >
+                      <Text style={[
+                        styles.fareLevelChipText,
+                        selectedFareLevelId === fl.id && styles.fareLevelChipTextSelected,
+                      ]}>
+                        {fl.label} — GHS {fl.amount.toFixed(2)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
             <TouchableOpacity
               style={[styles.modalButton, !stopLabel.trim() && { opacity: 0.5 }]}
               onPress={handleCreateStopFromModal}
@@ -487,34 +640,43 @@ export default function MappingScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   header: {
-    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10,
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8,
     backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB',
   },
   backBtn: { color: '#2563EB', fontSize: 16, fontWeight: '500', marginRight: 12 },
   headerInfo: { flex: 1 },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: '#111827' },
-  headerArea: { fontSize: 13, color: '#6B7280' },
+  headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: '#111827', flex: 1 },
+  recordingDot: {
+    width: 8, height: 8, borderRadius: 4, backgroundColor: '#DC2626',
+  },
+  headerSubRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 2 },
+  headerArea: { fontSize: 13, color: '#6B7280', flex: 1 },
+  gpsAccuracy: { fontSize: 11, color: '#9CA3AF', fontWeight: '500' },
   map: { flex: 1 },
   actionBar: {
-    flexDirection: 'row', padding: 12, gap: 8, backgroundColor: '#fff',
-    borderTopWidth: 1, borderTopColor: '#E5E7EB', paddingBottom: Platform.OS === 'ios' ? 30 : 12,
+    flexDirection: 'row', padding: 10, gap: 6, backgroundColor: '#fff',
+    borderTopWidth: 1, borderTopColor: '#E5E7EB', paddingBottom: Platform.OS === 'ios' ? 30 : 10,
   },
   actionBtn: {
-    flex: 1, backgroundColor: '#2563EB', paddingVertical: 14, borderRadius: 10, alignItems: 'center',
+    flex: 1, backgroundColor: '#2563EB', paddingVertical: 10, borderRadius: 8, alignItems: 'center',
   },
-  actionBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  actionBtnPaused: { backgroundColor: '#F59E0B' },
+  actionBtnText: { color: '#fff', fontWeight: '700', fontSize: 12 },
   actionBtnDanger: {
-    flex: 1, backgroundColor: '#DC2626', paddingVertical: 14, borderRadius: 10, alignItems: 'center',
+    flex: 1, backgroundColor: '#DC2626', paddingVertical: 10, borderRadius: 8, alignItems: 'center',
   },
-  actionBtnTextDanger: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  actionBtnTextDanger: { color: '#fff', fontWeight: '700', fontSize: 12 },
   modalOverlay: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end',
   },
   modalContent: {
     backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    padding: 24, maxHeight: '80%',
+    padding: 24, maxHeight: '85%',
   },
-  modalTitle: { fontSize: 20, fontWeight: '700', color: '#111827', marginBottom: 16 },
+  modalTitle: { fontSize: 20, fontWeight: '700', color: '#111827', marginBottom: 12 },
+  modalHint: { fontSize: 13, color: '#2563EB', marginBottom: 12 },
+  modalLabel: { fontSize: 14, fontWeight: '600', color: '#374151', marginBottom: 6, marginTop: 8 },
   modalText: { fontSize: 15, color: '#374151', marginBottom: 16 },
   bold: { fontWeight: '700' },
   modalInput: {
@@ -541,4 +703,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB', borderRadius: 8, padding: 10, fontSize: 14,
     borderWidth: 1, borderColor: '#D1D5DB', width: 100, textAlign: 'right', color: '#111827',
   },
+  fareLevelList: { marginBottom: 16, gap: 6 },
+  fareLevelChip: {
+    paddingVertical: 10, paddingHorizontal: 14, borderRadius: 8,
+    borderWidth: 1, borderColor: '#D1D5DB', backgroundColor: '#F9FAFB',
+  },
+  fareLevelChipSelected: {
+    borderColor: '#2563EB', backgroundColor: '#EBF5FF',
+  },
+  fareLevelChipText: { fontSize: 14, color: '#374151' },
+  fareLevelChipTextSelected: { color: '#2563EB', fontWeight: '600' },
 });

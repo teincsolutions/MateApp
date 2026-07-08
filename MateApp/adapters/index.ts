@@ -62,3 +62,11 @@ export async function exportJourneyXlsx(journeyId: string): Promise<{ base64: st
 export async function exportMasterXlsx(): Promise<{ base64: string; fileName: string } | null> {
   return exportService.exportMasterXlsx();
 }
+
+export async function exportJourneyCsv(journeyId: string): Promise<{ content: string; fileName: string } | null> {
+  return exportService.exportJourneyCsv(journeyId);
+}
+
+export async function exportMasterCsv(): Promise<{ content: string; fileName: string } | null> {
+  return exportService.exportMasterCsv();
+}

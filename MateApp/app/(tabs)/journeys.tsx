@@ -1,13 +1,15 @@
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { JourneyRepository } from '../../adapters/index';
+import { exportJourneyToFile } from '../../adapters/fileWriter';
 import { Journey } from '@mateapp/core';
 
 export default function JourneysScreen() {
   const router = useRouter();
   const [journeys, setJourneys] = useState<Journey[]>([]);
+  const [exporting, setExporting] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -34,6 +36,22 @@ export default function JourneysScreen() {
     ]);
   };
 
+  // Gap #8: Export action
+  const handleExport = async (journey: Journey) => {
+    setExporting(journey.id);
+    try {
+      await exportJourneyToFile(journey.id);
+    } catch {
+      Alert.alert('Error', 'Export failed.');
+    }
+    setExporting(null);
+  };
+
+  // Gap #7: Review action
+  const handleReview = (journey: Journey) => {
+    router.push({ pathname: '/mapping/index', params: { journeyId: journey.id } });
+  };
+
   const renderJourney = (journey: Journey) => (
     <View key={journey.id} style={styles.card}>
       <View style={styles.cardInfo}>
@@ -44,14 +62,30 @@ export default function JourneysScreen() {
         </View>
       </View>
       <View style={styles.cardActions}>
-        {journey.status === 'draft' && (
+        {journey.status === 'draft' ? (
           <TouchableOpacity
             style={styles.actionBtn}
             onPress={() => router.push({ pathname: '/mapping/index', params: { journeyId: journey.id } })}
           >
             <Text style={styles.actionBtnText}>Resume</Text>
           </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={styles.actionBtn} onPress={() => handleReview(journey)}>
+            <Text style={styles.actionBtnText}>Review</Text>
+          </TouchableOpacity>
         )}
+        {/* Gap #8: Export */}
+        <TouchableOpacity
+          style={styles.actionBtnExport}
+          onPress={() => handleExport(journey)}
+          disabled={exporting !== null}
+        >
+          {exporting === journey.id ? (
+            <ActivityIndicator color="#2563EB" size="small" />
+          ) : (
+            <Text style={styles.actionBtnExportText}>Export</Text>
+          )}
+        </TouchableOpacity>
         <TouchableOpacity style={styles.actionBtnSecondary} onPress={() => handleDelete(journey)}>
           <Text style={styles.actionBtnTextSecondary}>Delete</Text>
         </TouchableOpacity>
@@ -103,6 +137,8 @@ const styles = StyleSheet.create({
   cardActions: { flexDirection: 'row', gap: 8 },
   actionBtn: { backgroundColor: '#2563EB', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
   actionBtnText: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  actionBtnExport: { backgroundColor: '#EBF5FF', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: '#2563EB' },
+  actionBtnExportText: { color: '#2563EB', fontWeight: '600', fontSize: 13 },
   actionBtnSecondary: { backgroundColor: '#F3F4F6', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
   actionBtnTextSecondary: { color: '#DC2626', fontWeight: '600', fontSize: 13 },
 });

@@ -6,9 +6,12 @@ import { JourneyRepository } from '../../adapters/index';
 import { exportJourneyToFile, exportMasterToFile } from '../../adapters/fileWriter';
 import { Journey } from '@mateapp/core';
 
+type ExportFormat = 'xlsx' | 'csv';
+
 export default function ExportScreen() {
   const [journeys, setJourneys] = useState<Journey[]>([]);
   const [exporting, setExporting] = useState<string | null>(null);
+  const [format, setFormat] = useState<ExportFormat>('xlsx');
 
   useFocusEffect(
     useCallback(() => {
@@ -22,11 +25,11 @@ export default function ExportScreen() {
   const handleExportJourney = async (journey: Journey) => {
     setExporting(journey.id);
     try {
-      const path = await exportJourneyToFile(journey.id);
+      const path = await exportJourneyToFile(journey.id, format);
       if (!path) {
         Alert.alert('Error', 'Failed to export journey.');
       }
-    } catch (e) {
+    } catch {
       Alert.alert('Error', 'Export failed.');
     }
     setExporting(null);
@@ -35,11 +38,11 @@ export default function ExportScreen() {
   const handleMasterExport = async () => {
     setExporting('master');
     try {
-      const path = await exportMasterToFile();
+      const path = await exportMasterToFile(format);
       if (!path) {
         Alert.alert('Error', 'Failed to export data.');
       }
-    } catch (e) {
+    } catch {
       Alert.alert('Error', 'Export failed.');
     }
     setExporting(null);
@@ -49,7 +52,23 @@ export default function ExportScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.title}>Export Data</Text>
-        <Text style={styles.subtitle}>Export your mapping data as Excel (XLSX) files.</Text>
+        <Text style={styles.subtitle}>Export your mapping data as Excel (XLSX) or CSV files.</Text>
+
+        {/* Format toggle */}
+        <View style={styles.formatRow}>
+          <TouchableOpacity
+            style={[styles.formatBtn, format === 'xlsx' && styles.formatBtnActive]}
+            onPress={() => setFormat('xlsx')}
+          >
+            <Text style={[styles.formatBtnText, format === 'xlsx' && styles.formatBtnTextActive]}>XLSX</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.formatBtn, format === 'csv' && styles.formatBtnActive]}
+            onPress={() => setFormat('csv')}
+          >
+            <Text style={[styles.formatBtnText, format === 'csv' && styles.formatBtnTextActive]}>CSV</Text>
+          </TouchableOpacity>
+        </View>
 
         <TouchableOpacity
           style={styles.masterBtn}
@@ -59,7 +78,7 @@ export default function ExportScreen() {
           {exporting === 'master' ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.masterBtnText}>Master Export (All Data)</Text>
+            <Text style={styles.masterBtnText}>Master Export (All Data) — {format.toUpperCase()}</Text>
           )}
         </TouchableOpacity>
 
@@ -85,7 +104,7 @@ export default function ExportScreen() {
                   {exporting === journey.id ? (
                     <ActivityIndicator color="#fff" size="small" />
                   ) : (
-                    <Text style={styles.exportBtnText}>Export</Text>
+                    <Text style={styles.exportBtnText}>{format.toUpperCase()}</Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -102,6 +121,11 @@ const styles = StyleSheet.create({
   scroll: { padding: 20 },
   title: { fontSize: 28, fontWeight: '700', color: '#111827', marginBottom: 8, marginTop: 10 },
   subtitle: { fontSize: 15, color: '#6B7280', marginBottom: 24 },
+  formatRow: { flexDirection: 'row', backgroundColor: '#E5E7EB', borderRadius: 10, padding: 3, marginBottom: 20 },
+  formatBtn: { flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
+  formatBtnActive: { backgroundColor: '#fff', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 2, shadowOffset: { width: 0, height: 1 } },
+  formatBtnText: { fontSize: 15, fontWeight: '600', color: '#6B7280' },
+  formatBtnTextActive: { color: '#2563EB' },
   masterBtn: {
     backgroundColor: '#059669', paddingVertical: 18, borderRadius: 12, alignItems: 'center', marginBottom: 32,
   },
