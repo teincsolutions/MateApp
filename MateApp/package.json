@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "dependencies": {
+    "@expo/ui": "^57.0.4",
+    "@expo/vector-icons": "^15.0.2",
     "@mateapp/core": "*",
     "@mateapp/db-sqlite": "*",
     "expo": "~57.0.4",

@@ -86,13 +86,19 @@ describe('Business Rules', () => {
 
   describe('fare levels', () => {
     it('fare levels are ordered by order_no', async () => {
+      const journeyRepo = new JourneyRepository(db);
       const areaRepo = new AreaRepository(db);
       const area = await areaRepo.create('Test Area');
+      const journey = await journeyRepo.create('Test Journey');
       const fareLevelRepo = new AreaFareLevelRepository(db);
-      await fareLevelRepo.create(area.id, 'Extended', 2, 3.50);
-      await fareLevelRepo.create(area.id, 'Premium', 3, 5.00);
-      await fareLevelRepo.create(area.id, 'Minimum', 0, 1.50);
-      await fareLevelRepo.create(area.id, 'Standard', 1, 2.50);
+      const fl1 = await fareLevelRepo.create(journey.id, 'Extended', 2, 3.50);
+      const fl2 = await fareLevelRepo.create(journey.id, 'Premium', 3, 5.00);
+      const fl3 = await fareLevelRepo.create(journey.id, 'Minimum', 0, 1.50);
+      const fl4 = await fareLevelRepo.create(journey.id, 'Standard', 1, 2.50);
+      await fareLevelRepo.linkToArea(area.id, fl1.id);
+      await fareLevelRepo.linkToArea(area.id, fl2.id);
+      await fareLevelRepo.linkToArea(area.id, fl3.id);
+      await fareLevelRepo.linkToArea(area.id, fl4.id);
       const levels = await fareLevelRepo.getByArea(area.id);
       expect(levels).toHaveLength(4);
       expect(levels[0].order_no).toBe(0);

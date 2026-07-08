@@ -6,7 +6,7 @@ import {
   IJourneyAreaRepository,
   IJourneyFareRepository,
   ITrackPointRepository,
-  IAreaFareLevelRepository,
+  IFareLevelRepository,
   IAreaStopRepository,
   IValidationLogRepository,
 } from '../repositories/interfaces';
@@ -18,7 +18,7 @@ export interface ExportDependencies {
   journeyAreaRepo: IJourneyAreaRepository;
   journeyFareRepo: IJourneyFareRepository;
   trackPointRepo: ITrackPointRepository;
-  areaFareLevelRepo: IAreaFareLevelRepository;
+  areaFareLevelRepo: IFareLevelRepository;
   areaStopRepo: IAreaStopRepository;
   validationLogRepo: IValidationLogRepository;
 }
@@ -38,16 +38,20 @@ export class ExportService {
 
     // JourneyAreas sheet
     const journeyAreas = await this.deps.journeyAreaRepo.getByJourney(journeyId);
-    const jaRows = [['ID', 'Area ID', 'Sequence', 'Created'], ...journeyAreas.map(ja => [ja.id, ja.area_id, ja.sequence, ja.created_at] as string[])];
+    const areaIds = journeyAreas.map(ja => ja.area_id);
+    const areas = [];
+    const areaNameMap = new Map<string, string>();
+    for (const areaId of areaIds) {
+      const area = await this.deps.areaRepo.getById(areaId);
+      if (area) {
+        areas.push(area);
+        areaNameMap.set(area.id, area.name);
+      }
+    }
+    const jaRows = [['ID', 'Area', 'Area ID', 'Sequence', 'Created'], ...journeyAreas.map(ja => [ja.id, areaNameMap.get(ja.area_id) || '', ja.area_id, String(ja.sequence), ja.created_at] as string[])];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(jaRows), 'JourneyAreas');
 
     // Areas sheet
-    const areaIds = journeyAreas.map(ja => ja.area_id);
-    const areas = [];
-    for (const areaId of areaIds) {
-      const area = await this.deps.areaRepo.getById(areaId);
-      if (area) areas.push(area);
-    }
     const areaRows = [['ID', 'Name', 'Created'], ...areas.map(a => [a.id, a.name, a.created_at] as string[])];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(areaRows), 'Areas');
 
@@ -56,10 +60,10 @@ export class ExportService {
     for (const area of areas) {
       const stops = await this.deps.stopRepo.findByArea(area.id);
       for (const stop of stops) {
-        allStops.push([stop.id, stop.label, String(stop.latitude), String(stop.longitude), String(stop.radius), area.name]);
+        allStops.push([area.name, stop.id, stop.label, String(stop.latitude), String(stop.longitude), String(stop.radius)]);
       }
     }
-    const stopRows = [['ID', 'Label', 'Latitude', 'Longitude', 'Radius', 'Area'], ...allStops];
+    const stopRows = [['Area', 'ID', 'Stops', 'Latitude', 'Longitude', 'Radius'], ...allStops];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(stopRows), 'Stops');
 
     // JourneyFares sheet
@@ -67,15 +71,9 @@ export class ExportService {
     const fareRows = [['ID', 'From JA', 'To JA', 'Amount'], ...fares.map(f => [f.id, f.from_journey_area_id, f.to_journey_area_id, String(f.amount)] as string[])];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(fareRows), 'Fares');
 
-    // AreaFareLevels sheet
-    const allFareLevels: string[][] = [];
-    for (const area of areas) {
-      const levels = await this.deps.areaFareLevelRepo.getByArea(area.id);
-      for (const lvl of levels) {
-        allFareLevels.push([lvl.id, area.name, lvl.label, String(lvl.order_no), String(lvl.amount)]);
-      }
-    }
-    const lvlRows = [['ID', 'Area', 'Label', 'Order', 'Amount'], ...allFareLevels];
+    // FareLevels sheet (journey-scoped)
+    const fareLevels = await this.deps.areaFareLevelRepo.getByJourney(journeyId);
+    const lvlRows = [['ID', 'Journey ID', 'Label', 'Order', 'Amount'], ...fareLevels.map(lvl => [lvl.id, lvl.journey_id, lvl.label, String(lvl.order_no), String(lvl.amount)] as string[])];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(lvlRows), 'FareLevels');
 
     // TrackPoints sheet
@@ -140,11 +138,11 @@ export class ExportService {
     for (const area of areas) {
       const stops = await this.deps.stopRepo.findByArea(area.id);
       for (const stop of stops) {
-        allStops.push(`Stop,${escapeCsv(stop.id)},${escapeCsv(stop.label)},${stop.latitude},${stop.longitude},${stop.radius},${escapeCsv(area.name)}`);
+        allStops.push(`Stop,${escapeCsv(area.name)},${escapeCsv(stop.id)},${escapeCsv(stop.label)},${stop.latitude},${stop.longitude},${stop.radius}`);
       }
     }
     if (allStops.length > 0) {
-      lines.push('\nType,Stop ID,Label,Latitude,Longitude,Radius,Area');
+      lines.push('\nType,Area,Stop ID,Stops,Latitude,Longitude,Radius');
       lines.push(...allStops);
     }
 
@@ -187,7 +185,7 @@ export class ExportService {
 
     const stops = await this.deps.stopRepo.getAll();
     lines.push('\n--- Stops ---');
-    lines.push('ID,Label,Latitude,Longitude,Radius,Created');
+    lines.push('ID,Stops,Latitude,Longitude,Radius,Created');
     for (const s of stops) {
       lines.push(`${escapeCsv(s.id)},${escapeCsv(s.label)},${s.latitude},${s.longitude},${s.radius},${escapeCsv(s.created_at)}`);
     }

@@ -15,7 +15,7 @@ export default function NewJourneyScreen() {
     setLoading(true);
     const journey = await JourneyRepository.create(trimmed);
     setLoading(false);
-    router.replace({ pathname: '/mapping/index', params: { journeyId: journey.id } });
+    router.replace({ pathname: '/mapping', params: { journeyId: journey.id } });
   };
 
   return (

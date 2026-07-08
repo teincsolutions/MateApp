@@ -4,7 +4,7 @@ import {
   IJourneyAreaRepository,
   IJourneyFareRepository,
   IAreaStopRepository,
-  IAreaFareLevelRepository,
+  IFareLevelRepository,
   IJourneyRepository,
   IValidationLogRepository,
 } from '../repositories/interfaces';
@@ -31,7 +31,7 @@ export interface ValidationDependencies {
   journeyAreaRepo: IJourneyAreaRepository;
   journeyFareRepo: IJourneyFareRepository;
   areaStopRepo: IAreaStopRepository;
-  areaFareLevelRepo: IAreaFareLevelRepository;
+  areaFareLevelRepo: IFareLevelRepository;
   journeyRepo: IJourneyRepository;
   validationLogRepo: IValidationLogRepository;
 }

@@ -1,25 +1,27 @@
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Alert, Modal,
-  TextInput, ScrollView, Platform, ActivityIndicator,
+  View, Text, TouchableOpacity, StyleSheet, Alert,
+  TextInput, ScrollView, ActivityIndicator,
 } from 'react-native';
 import MapView, { Marker, Polyline, Polygon, PROVIDER_DEFAULT } from 'react-native-maps';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
+import { BottomSheet, Host, RNHostView } from '@expo/ui';
 
 import { JourneyRepository, AreaRepository, StopRepository, AreaStopRepository, JourneyAreaRepository, JourneyFareRepository, AreaFareLevelRepository, TrackPointRepository } from '../../adapters/index';
-import { GeometryService, LatLng, useJourneyStore, useMappingStore, useSettingsStore, Journey, Area, Stop, JourneyArea as JA, TrackPoint, AreaFareLevel } from '@mateapp/core';
+import { GeometryService, LatLng, useJourneyStore, useMappingStore, useSettingsStore, Journey, Area, Stop, JourneyArea as JA, TrackPoint, FareLevel } from '@mateapp/core';
 
 export default function MappingScreen() {
   const router = useRouter();
   const { journeyId } = useLocalSearchParams<{ journeyId: string }>();
+  const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
   const locationSub = useRef<Location.LocationSubscription | null>(null);
   const trackIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { activeJourney, activeJourneyArea, setActiveJourney, setActiveJourneyArea, setIsTracking } = useJourneyStore();
-  const { currentLocation, trackPoints, trackSequence, setCurrentLocation, addTrackPoint, setTrackSequence, setIsRecording, isRecording, reset: resetMapping } = useMappingStore();
+  const { currentLocation, trackPoints, trackSequence, setCurrentLocation, addTrackPoint, setTrackPoints, setTrackSequence, setIsRecording, isRecording, reset: resetMapping } = useMappingStore();
   const { gpsInterval, minDistance } = useSettingsStore();
 
   const [journey, setJourney] = useState<Journey | null>(null);
@@ -31,13 +33,15 @@ export default function MappingScreen() {
   const [showFareModal, setShowFareModal] = useState(false);
   const [showStopModal, setShowStopModal] = useState(false);
   const [newAreaName, setNewAreaName] = useState('');
+  const [newAreaFare, setNewAreaFare] = useState('');
+  const [creatingArea, setCreatingArea] = useState(false);
   const [stopLabel, setStopLabel] = useState('');
   const [selectedFareLevelId, setSelectedFareLevelId] = useState<string | null>(null);
   const [fareAmounts, setFareAmounts] = useState<Record<string, string>>({});
   const [suggestedArea, setSuggestedArea] = useState<Area | null>(null);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const [pendingAreaBeforeFares, setPendingAreaBeforeFares] = useState<Area | false>(false);
-  const [areaFareLevels, setAreaFareLevels] = useState<AreaFareLevel[]>([]);
+  const [areaFareLevels, setAreaFareLevels] = useState<FareLevel[]>([]);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
 
   const loadJourney = useCallback(async () => {
@@ -73,10 +77,7 @@ export default function MappingScreen() {
     const tps = await TrackPointRepository.getByJourney(j.id);
     const maxSeq = tps.length > 0 ? Math.max(...tps.map(t => t.sequence)) : 0;
     setTrackSequence(maxSeq);
-
-    for (const tp of tps) {
-      addTrackPoint(tp);
-    }
+    setTrackPoints(tps);
     setIsTracking(true);
     setIsRecording(true);
     setInitialLoadDone(true);
@@ -102,6 +103,7 @@ export default function MappingScreen() {
   useEffect(() => {
     if (!initialLoadDone || !journey || journeyAreas.length > 0 || !currentLocation) return;
     setNewAreaName('');
+    setNewAreaFare('');
     setSuggestedArea(null);
     const timer = setTimeout(() => setShowNewAreaModal(true), 500);
     return () => clearTimeout(timer);
@@ -236,7 +238,8 @@ export default function MappingScreen() {
   };
 
   const handleCreateArea = async () => {
-    if (!currentLocation || !journey) return;
+    if (!currentLocation || !journey || creatingArea) return;
+    setCreatingArea(true);
     const name = newAreaName.trim();
     let area: Area;
 
@@ -246,9 +249,15 @@ export default function MappingScreen() {
     } else {
       if (!name) {
         Alert.alert('Error', 'Enter an area name.');
+        setCreatingArea(false);
         return;
       }
-      area = await AreaRepository.create(name);
+      const existing = await AreaRepository.getByName(name);
+      if (existing) {
+        area = existing;
+      } else {
+        area = await AreaRepository.create(name);
+      }
     }
 
     const seq = journeyAreas.length + 1;
@@ -266,10 +275,29 @@ export default function MappingScreen() {
         currentLocation.longitude
       );
     }
-    // Check if already linked, if not link it
+    // Create or reuse fare level for this area
+    let fareLevel = null;
+    const existingLevels = await AreaFareLevelRepository.getByArea(area.id);
+    if (existingLevels.length === 0) {
+      const amount = parseFloat(newAreaFare) || 0;
+      // Check if any journey-level fare matches this amount
+      const journeyLevels = await AreaFareLevelRepository.getByJourney(journey.id);
+      const existing = journeyLevels.find(l => Math.abs(l.amount - amount) < 0.01);
+      if (existing) {
+        await AreaFareLevelRepository.linkToArea(area.id, existing.id);
+        fareLevel = existing;
+      } else {
+        const label = amount > 0 ? `GHS ${amount.toFixed(2)}` : 'Minimum';
+        fareLevel = await AreaFareLevelRepository.create(journey.id, label, 0, amount);
+        await AreaFareLevelRepository.linkToArea(area.id, fareLevel.id);
+      }
+    } else {
+      fareLevel = existingLevels[0];
+    }
+    // Check if already linked, if not link with fare level
     const existingLink = await AreaStopRepository.getByAreaAndStop(area.id, stop.id);
     if (!existingLink) {
-      await AreaStopRepository.create(area.id, stop.id);
+      await AreaStopRepository.create(area.id, stop.id, fareLevel?.id);
     }
     await updateAreaPolygon(area.id);
 
@@ -277,10 +305,12 @@ export default function MappingScreen() {
     await JourneyRepository.updateStatus(journey.id, 'draft');
     setShowNewAreaModal(false);
     setNewAreaName('');
+    setNewAreaFare('');
     setSuggestedArea(null);
     setPendingAreaBeforeFares(false);
 
     await loadJourney();
+    setCreatingArea(false);
     Alert.alert('Area Created', `Now in area: ${area.name}`);
   };
 
@@ -289,15 +319,30 @@ export default function MappingScreen() {
     const seq = journeyAreas.length + 1;
     const ja = await JourneyAreaRepository.create(journey.id, suggestedArea.id, seq);
 
+    // Ensure journey fare levels exist and link to area
+    const existingLevels = await AreaFareLevelRepository.getByArea(suggestedArea.id);
+    if (existingLevels.length === 0) {
+      const journeyLevels = await AreaFareLevelRepository.getByJourney(journey.id);
+      if (journeyLevels.length > 0) {
+        for (const lvl of journeyLevels) {
+          await AreaFareLevelRepository.linkToArea(suggestedArea.id, lvl.id);
+        }
+      } else {
+        const fl = await AreaFareLevelRepository.create(journey.id, 'Minimum', 0, 0);
+        await AreaFareLevelRepository.linkToArea(suggestedArea.id, fl.id);
+      }
+    }
+
     const existingStops = await StopRepository.findByRadius(currentLocation.latitude, currentLocation.longitude, 50);
-    let stop: Stop;
     if (existingStops.length === 0) {
-      stop = await StopRepository.create(`${suggestedArea.name} Stop`, currentLocation.latitude, currentLocation.longitude);
-      await AreaStopRepository.create(suggestedArea.id, stop.id);
+      const stop = await StopRepository.create(`${suggestedArea.name} Stop`, currentLocation.latitude, currentLocation.longitude);
+      const levels = await AreaFareLevelRepository.getByArea(suggestedArea.id);
+      await AreaStopRepository.create(suggestedArea.id, stop.id, levels[0]?.id);
     }
     setActiveJourneyArea({ area: suggestedArea, journeyAreaId: ja.id, sequence: seq });
     setShowNewAreaModal(false);
     setSuggestedArea(null);
+    setNewAreaFare('');
     setPendingAreaBeforeFares(false);
     await loadJourney();
     Alert.alert('Area Reused', `Using existing area: ${suggestedArea.name}`);
@@ -400,240 +445,174 @@ export default function MappingScreen() {
     longitude: tp.longitude,
   }));
 
+  const handleDismissAreaModal = () => { setShowNewAreaModal(false); setSuggestedArea(null); setNewAreaName(''); setNewAreaFare(''); setCreatingArea(false); };
+  const handleDismissStopModal = () => { setShowStopModal(false); setStopLabel(''); };
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backBtn}>Back</Text>
-        </TouchableOpacity>
-        <View style={styles.headerInfo}>
-          <View style={styles.headerTitleRow}>
-            <Text style={styles.headerTitle} numberOfLines={1}>{journey?.name || 'Journey'}</Text>
-            {/* Gap #6: Tracking indicator */}
-            {isRecording && (
-              <View style={styles.recordingDot} />
-            )}
-          </View>
-          <View style={styles.headerSubRow}>
-            <Text style={styles.headerArea} numberOfLines={1}>
-              {activeJourneyArea ? activeJourneyArea.area.name : 'No area'}
-            </Text>
-            {/* Gap #5: GPS accuracy */}
-            {gpsAccuracy !== null && (
-              <Text style={styles.gpsAccuracy}>
-                ±{gpsAccuracy.toFixed(1)}m
-              </Text>
-            )}
-          </View>
-        </View>
-      </View>
-
-      <MapView
-        ref={mapRef}
-        style={styles.map}
-        provider={PROVIDER_DEFAULT}
-        showsUserLocation
-        followsUserLocation
-        initialRegion={{
-          latitude: currentLocation?.latitude || 5.6037,
-          longitude: currentLocation?.longitude || -0.1870,
-          latitudeDelta: 0.05,
-          longitudeDelta: 0.05,
-        }}
-      >
-        {areaPolygons.map((ap) => (
-          <Polygon
-            key={ap.areaId}
-            coordinates={ap.polygon}
-            fillColor="rgba(37, 99, 235, 0.15)"
-            strokeColor="#2563EB"
-            strokeWidth={2}
-          />
-        ))}
-        {stops.map((stop) => (
-          <Marker
-            key={stop.id}
-            coordinate={{ latitude: stop.latitude, longitude: stop.longitude }}
-            title={stop.label}
-            description={`Radius: ${stop.radius}m`}
-            pinColor="#059669"
-          />
-        ))}
-        {existingTrackPoints.length > 1 && (
-          <Polyline
-            coordinates={existingTrackPoints}
-            strokeColor="#2563EB"
-            strokeWidth={3}
-          />
-        )}
-      </MapView>
-
-      <View style={styles.actionBar}>
-        <TouchableOpacity style={styles.actionBtn} onPress={handleAddStop}>
-          <Text style={styles.actionBtnText}>Add Stop</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtn} onPress={handleNewArea}>
-          <Text style={styles.actionBtnText}>New Area</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtn} onPress={() => handleEnterFares()}>
-          <Text style={styles.actionBtnText}>Fares</Text>
-        </TouchableOpacity>
-        {/* Gap #4: Pause/Resume */}
-        <TouchableOpacity
-          style={[styles.actionBtn, !isRecording && styles.actionBtnPaused]}
-          onPress={handlePauseResume}
-        >
-          <Text style={styles.actionBtnText}>{isRecording ? 'Pause' : 'Resume'}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtnDanger} onPress={handleFinishJourney}>
-          <Text style={styles.actionBtnTextDanger}>Finish</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* New Area Modal */}
-      <Modal visible={showNewAreaModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>
-              {journeyAreas.length === 0 ? 'Create First Area' : 'New Area'}
-            </Text>
-            {journeyAreas.length === 0 && (
-              <Text style={styles.modalHint}>Start by naming the area at your current location.</Text>
-            )}
-            {suggestedArea ? (
-              <>
-                <Text style={styles.modalText}>Existing area found: <Text style={styles.bold}>{suggestedArea.name}</Text></Text>
-                <TouchableOpacity style={styles.modalButton} onPress={handleUseSuggestedArea}>
-                  <Text style={styles.modalButtonText}>Use "{suggestedArea.name}"</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.modalButtonSecondary} onPress={() => setSuggestedArea(null)}>
-                  <Text style={styles.modalButtonTextSecondary}>Create New Area Instead</Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                <Text style={styles.modalText}>
-                  {journeyAreas.length === 0
-                    ? 'Enter a name for your first area. A stop will be created automatically at your GPS location.'
-                    : 'Enter a name for the new area at your current location.'}
+    <View style={{ flex: 1, backgroundColor: '#fff' }}>
+      <Host style={{ flex: 1 }}>
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => router.back()}>
+              <Text style={styles.backBtn}>Back</Text>
+            </TouchableOpacity>
+            <View style={styles.headerInfo}>
+              <View style={styles.headerTitleRow}>
+                <Text style={styles.headerTitle} numberOfLines={1}>{journey?.name || 'Journey'}</Text>
+                {isRecording && <View style={styles.recordingDot} />}
+              </View>
+              <View style={styles.headerSubRow}>
+                <Text style={styles.headerArea} numberOfLines={1}>
+                  {activeJourneyArea ? activeJourneyArea.area.name : 'No area'}
                 </Text>
-                <TextInput
-                  style={styles.modalInput}
-                  value={newAreaName}
-                  onChangeText={setNewAreaName}
-                  placeholder="Area name (e.g. Kejetia)"
-                  placeholderTextColor="#9CA3AF"
-                  autoFocus
-                />
-                <TouchableOpacity
-                  style={[styles.modalButton, !newAreaName.trim() && { opacity: 0.5 }]}
-                  onPress={handleCreateArea}
-                  disabled={!newAreaName.trim()}
-                >
-                  <Text style={styles.modalButtonText}>Create Area</Text>
-                </TouchableOpacity>
-              </>
+                {gpsAccuracy !== null && (
+                  <Text style={styles.gpsAccuracy}>±{gpsAccuracy.toFixed(1)}m</Text>
+                )}
+              </View>
+            </View>
+          </View>
+
+          <MapView
+            ref={mapRef}
+            style={styles.map}
+            provider={PROVIDER_DEFAULT}
+            showsUserLocation
+            followsUserLocation
+            initialRegion={{
+              latitude: currentLocation?.latitude || 5.6037,
+              longitude: currentLocation?.longitude || -0.1870,
+              latitudeDelta: 0.05,
+              longitudeDelta: 0.05,
+            }}
+          >
+            {areaPolygons.map((ap) => (
+              <Polygon key={ap.areaId} coordinates={ap.polygon} fillColor="rgba(37, 99, 235, 0.15)" strokeColor="#2563EB" strokeWidth={2} />
+            ))}
+            {stops.map((stop) => (
+              <Marker key={stop.id} coordinate={{ latitude: stop.latitude, longitude: stop.longitude }} title={stop.label} description={`Radius: ${stop.radius}m`} pinColor="#059669" />
+            ))}
+            {existingTrackPoints.length > 1 && (
+              <Polyline coordinates={existingTrackPoints} strokeColor="#2563EB" strokeWidth={3} />
             )}
-            <TouchableOpacity style={styles.modalCancel} onPress={() => { setShowNewAreaModal(false); setSuggestedArea(null); setNewAreaName(''); }}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
+          </MapView>
+
+          <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom || 0, 70) }]}>
+          <View style={styles.actionBar}>
+            <TouchableOpacity style={styles.actionBtn} onPress={handleAddStop}>
+              <Text style={styles.actionBtnText}>+ Add Stop</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionBtn} onPress={handleNewArea}>
+              <Text style={styles.actionBtnText}>+ New Area</Text>
+            </TouchableOpacity>
+            {journeyAreas.length >= 2 && (
+              <TouchableOpacity style={styles.actionBtn} onPress={() => handleEnterFares()}>
+                <Text style={styles.actionBtnText}>Fares</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.actionBtnDanger} onPress={handleFinishJourney}>
+              <Text style={styles.actionBtnTextDanger}>End</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </Modal>
 
-      {/* Fare Entry Modal */}
-      <Modal visible={showFareModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Enter Fares</Text>
-            <Text style={styles.modalText}>Set inter-area fares. Fares are bidirectional.</Text>
-            <ScrollView style={styles.fareScroll}>
-              {journeyAreas.map((jaFrom, i) =>
-                journeyAreas.slice(i + 1).map((jaTo) => {
-                  const key = `${jaFrom.id}-${jaTo.id}`;
-                  const areaFrom = areas.find(a => a.id === jaFrom.area_id);
-                  const areaTo = areas.find(a => a.id === jaTo.area_id);
-                  return (
-                    <View key={key} style={styles.fareRow}>
-                      <Text style={styles.fareLabel}>{areaFrom?.name || '?'} → {areaTo?.name || '?'}</Text>
-                      <TextInput
-                        style={styles.fareInput}
-                        value={fareAmounts[key] || ''}
-                        onChangeText={(v) => setFareAmounts(prev => ({ ...prev, [key]: v }))}
-                        placeholder="GHS 0.00"
-                        placeholderTextColor="#9CA3AF"
-                        keyboardType="decimal-pad"
-                      />
-                    </View>
-                  );
-                })
+          <TouchableOpacity style={styles.pauseBtn} onPress={handlePauseResume}>
+            <Text style={styles.pauseBtnText}>{isRecording ? 'Pause GPS' : 'Resume GPS'}</Text>
+          </TouchableOpacity>
+        </View>
+        </View>
+
+        <BottomSheet isPresented={showNewAreaModal} onDismiss={handleDismissAreaModal} snapPoints={['full']}>
+          <RNHostView>
+            <ScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
+              <Text style={styles.modalTitle}>{journeyAreas.length === 0 ? 'Create First Area' : 'New Area'}</Text>
+              {journeyAreas.length === 0 && <Text style={styles.modalHint}>Start by naming the area at your current location.</Text>}
+              {suggestedArea ? (
+                <>
+                  <Text style={styles.modalText}>Existing area found: <Text style={styles.bold}>{suggestedArea.name}</Text></Text>
+                  <TouchableOpacity style={styles.modalButton} onPress={handleUseSuggestedArea}>
+                    <Text style={styles.modalButtonText}>Use "{suggestedArea.name}"</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.modalButtonSecondary} onPress={() => setSuggestedArea(null)}>
+                    <Text style={styles.modalButtonTextSecondary}>Create New Area Instead</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.modalText}>{journeyAreas.length === 0 ? 'Enter a name for your first area. A stop will be created automatically at your GPS location.' : 'Enter a name for the new area at your current location.'}</Text>
+                  <TextInput style={styles.modalInput} value={newAreaName} onChangeText={setNewAreaName} placeholder="Area name (e.g. Kejetia)" placeholderTextColor="#9CA3AF" autoFocus />
+                  <Text style={styles.modalLabel}>Minimum Fare (GHS)</Text>
+                  <TextInput style={styles.modalInput} value={newAreaFare} onChangeText={setNewAreaFare} placeholder="0.00" placeholderTextColor="#9CA3AF" keyboardType="decimal-pad" />
+                  <TouchableOpacity style={[styles.modalButton, (!newAreaName.trim() || creatingArea) && { opacity: 0.5 }]} onPress={handleCreateArea} disabled={!newAreaName.trim() || creatingArea}>
+                    <Text style={styles.modalButtonText}>Create Area</Text>
+                  </TouchableOpacity>
+                </>
               )}
+              <TouchableOpacity style={styles.modalCancel} onPress={handleDismissAreaModal}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
             </ScrollView>
-            <TouchableOpacity style={styles.modalButton} onPress={handleSaveFares}>
-              <Text style={styles.modalButtonText}>Save Fares</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.modalCancel} onPress={() => setShowFareModal(false)}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+          </RNHostView>
+        </BottomSheet>
 
-      {/* Stop Modal with Fare Level picker (Gap #2) */}
-      <Modal visible={showStopModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Add Stop</Text>
-            <Text style={styles.modalText}>Enter a label for this stop at your current location.</Text>
-            <Text style={styles.modalLabel}>Stop Label</Text>
-            <TextInput
-              style={styles.modalInput}
-              value={stopLabel}
-              onChangeText={setStopLabel}
-              placeholder="e.g. Main Station"
-              placeholderTextColor="#9CA3AF"
-              autoFocus
-              onSubmitEditing={handleCreateStopFromModal}
-            />
-            {/* Fare Level picker */}
-            {areaFareLevels.length > 0 && (
-              <>
-                <Text style={styles.modalLabel}>Fare Level</Text>
-                <View style={styles.fareLevelList}>
-                  {areaFareLevels.map((fl) => (
-                    <TouchableOpacity
-                      key={fl.id}
-                      style={[
-                        styles.fareLevelChip,
-                        selectedFareLevelId === fl.id && styles.fareLevelChipSelected,
-                      ]}
-                      onPress={() => setSelectedFareLevelId(fl.id)}
-                    >
-                      <Text style={[
-                        styles.fareLevelChipText,
-                        selectedFareLevelId === fl.id && styles.fareLevelChipTextSelected,
-                      ]}>
-                        {fl.label} — GHS {fl.amount.toFixed(2)}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </>
-            )}
-            <TouchableOpacity
-              style={[styles.modalButton, !stopLabel.trim() && { opacity: 0.5 }]}
-              onPress={handleCreateStopFromModal}
-              disabled={!stopLabel.trim()}
-            >
-              <Text style={styles.modalButtonText}>Add Stop</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.modalCancel} onPress={() => { setShowStopModal(false); setStopLabel(''); }}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
+        <BottomSheet isPresented={showFareModal} onDismiss={() => setShowFareModal(false)} snapPoints={['full']}>
+          <RNHostView>
+            <View style={styles.sheetContent}>
+              <Text style={styles.modalTitle}>Enter Fares</Text>
+              <Text style={styles.modalText}>Set inter-area fares. Fares are bidirectional.</Text>
+              <ScrollView style={styles.fareScroll}>
+                {journeyAreas.map((jaFrom, i) =>
+                  journeyAreas.slice(i + 1).map((jaTo) => {
+                    const key = `${jaFrom.id}-${jaTo.id}`;
+                    const areaFrom = areas.find(a => a.id === jaFrom.area_id);
+                    const areaTo = areas.find(a => a.id === jaTo.area_id);
+                    return (
+                      <View key={key} style={styles.fareRow}>
+                        <Text style={styles.fareLabel}>{areaFrom?.name || '?'} → {areaTo?.name || '?'}</Text>
+                        <TextInput style={styles.fareInput} value={fareAmounts[key] || ''} onChangeText={(v) => setFareAmounts(prev => ({ ...prev, [key]: v }))} placeholder="GHS 0.00" placeholderTextColor="#9CA3AF" keyboardType="decimal-pad" />
+                      </View>
+                    );
+                  })
+                )}
+              </ScrollView>
+              <TouchableOpacity style={styles.modalButton} onPress={handleSaveFares}>
+                <Text style={styles.modalButtonText}>Save Fares</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setShowFareModal(false)}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </RNHostView>
+        </BottomSheet>
+
+        <BottomSheet isPresented={showStopModal} onDismiss={handleDismissStopModal} snapPoints={['full']}>
+          <RNHostView>
+            <ScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
+              <Text style={styles.modalTitle}>Add Stop</Text>
+              <Text style={styles.modalText}>Enter a label for this stop at your current location.</Text>
+              <Text style={styles.modalLabel}>Stop Label</Text>
+              <TextInput style={styles.modalInput} value={stopLabel} onChangeText={setStopLabel} placeholder="e.g. Main Station" placeholderTextColor="#9CA3AF" autoFocus onSubmitEditing={handleCreateStopFromModal} />
+              {areaFareLevels.length > 0 && (
+                <>
+                  <Text style={styles.modalLabel}>Fare Level</Text>
+                  <View style={styles.fareLevelList}>
+                    {areaFareLevels.map((fl) => (
+                      <TouchableOpacity key={fl.id} style={[styles.fareLevelChip, selectedFareLevelId === fl.id && styles.fareLevelChipSelected]} onPress={() => setSelectedFareLevelId(fl.id)}>
+                        <Text style={[styles.fareLevelChipText, selectedFareLevelId === fl.id && styles.fareLevelChipTextSelected]}>{fl.label} — GHS {fl.amount.toFixed(2)}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              )}
+              <TouchableOpacity style={[styles.modalButton, !stopLabel.trim() && { opacity: 0.5 }]} onPress={handleCreateStopFromModal} disabled={!stopLabel.trim()}>
+                <Text style={styles.modalButtonText}>Add Stop</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalCancel} onPress={handleDismissStopModal}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </RNHostView>
+        </BottomSheet>
+      </Host>
+    </View>
   );
 }
 
@@ -655,18 +634,28 @@ const styles = StyleSheet.create({
   gpsAccuracy: { fontSize: 11, color: '#9CA3AF', fontWeight: '500' },
   map: { flex: 1 },
   actionBar: {
-    flexDirection: 'row', padding: 10, gap: 6, backgroundColor: '#fff',
-    borderTopWidth: 1, borderTopColor: '#E5E7EB', paddingBottom: Platform.OS === 'ios' ? 30 : 10,
+    flexDirection: 'row', padding: 12, gap: 10, backgroundColor: '#fff',
+    borderTopWidth: 1, borderTopColor: '#E5E7EB',
   },
   actionBtn: {
-    flex: 1, backgroundColor: '#2563EB', paddingVertical: 10, borderRadius: 8, alignItems: 'center',
+    flex: 1, backgroundColor: '#2563EB', paddingVertical: 16, borderRadius: 12, alignItems: 'center',
+    justifyContent: 'center',
   },
-  actionBtnPaused: { backgroundColor: '#F59E0B' },
-  actionBtnText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  actionBtnText: { color: '#fff', fontWeight: '600', fontSize: 13 },
   actionBtnDanger: {
-    flex: 1, backgroundColor: '#DC2626', paddingVertical: 10, borderRadius: 8, alignItems: 'center',
+    flex: 1, backgroundColor: '#DC2626', paddingVertical: 16, borderRadius: 12, alignItems: 'center',
+    justifyContent: 'center',
   },
-  actionBtnTextDanger: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  actionBtnTextDanger: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  bottomBar: { backgroundColor: '#fff' },
+  pauseBtn: {
+    marginTop: 8, marginHorizontal: 12, marginBottom: 4,
+    paddingVertical: 14, paddingHorizontal: 20, borderRadius: 12,
+    alignItems: 'center', alignSelf: 'center',
+    backgroundColor: '#F3F4F6',
+    minWidth: 200,
+  },
+  pauseBtnText: { color: '#6B7280', fontWeight: '600', fontSize: 13 },
   modalOverlay: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end',
   },
@@ -713,4 +702,8 @@ const styles = StyleSheet.create({
   },
   fareLevelChipText: { fontSize: 14, color: '#374151' },
   fareLevelChipTextSelected: { color: '#2563EB', fontWeight: '600' },
+  sheetContent: {
+    padding: 24,
+    gap: 8,
+  },
 });

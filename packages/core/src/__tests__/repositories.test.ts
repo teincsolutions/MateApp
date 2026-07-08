@@ -289,6 +289,7 @@ describe('AreaFareLevelRepository', () => {
   let areaRepo: AreaRepository;
   let stopRepo: StopRepository;
   let areaStopRepo: AreaStopRepository;
+  let journeyRepo: JourneyRepository;
 
   beforeEach(() => {
     db = getMemoryDatabase();
@@ -296,6 +297,7 @@ describe('AreaFareLevelRepository', () => {
     areaRepo = new AreaRepository(db);
     stopRepo = new StopRepository(db);
     areaStopRepo = new AreaStopRepository(db);
+    journeyRepo = new JourneyRepository(db);
   });
 
   afterEach(() => {
@@ -303,18 +305,21 @@ describe('AreaFareLevelRepository', () => {
   });
 
   it('creates a fare level', async () => {
-    const area = await areaRepo.create('Test Area');
-    const fl = await repo.create(area.id, 'Minimum', 0, 1.50);
+    const journey = await journeyRepo.create('Test Journey');
+    const fl = await repo.create(journey.id, 'Minimum', 0, 1.50);
     expect(fl.label).toBe('Minimum');
     expect(fl.order_no).toBe(0);
     expect(fl.amount).toBe(1.50);
-    expect(fl.area_id).toBe(area.id);
+    expect(fl.journey_id).toBe(journey.id);
   });
 
   it('getByArea returns fare levels ordered by order_no', async () => {
+    const journey = await journeyRepo.create('Test Journey');
     const area = await areaRepo.create('Test Area');
-    await repo.create(area.id, 'Extended', 1, 3.00);
-    await repo.create(area.id, 'Minimum', 0, 1.50);
+    const fl1 = await repo.create(journey.id, 'Extended', 1, 3.00);
+    const fl2 = await repo.create(journey.id, 'Minimum', 0, 1.50);
+    await repo.linkToArea(area.id, fl1.id);
+    await repo.linkToArea(area.id, fl2.id);
     const levels = await repo.getByArea(area.id);
     expect(levels).toHaveLength(2);
     expect(levels[0].order_no).toBe(0);
@@ -328,9 +333,11 @@ describe('AreaFareLevelRepository', () => {
   });
 
   it('getByAreaStop returns fare level for area_stop', async () => {
+    const journey = await journeyRepo.create('Test Journey');
     const area = await areaRepo.create('Test Area');
     const stop = await stopRepo.create('Test Stop', 1, 1);
-    const fl = await repo.create(area.id, 'Minimum', 0, 1.50);
+    const fl = await repo.create(journey.id, 'Minimum', 0, 1.50);
+    await repo.linkToArea(area.id, fl.id);
     const areaStop = await areaStopRepo.create(area.id, stop.id, fl.id);
     const found = await repo.getByAreaStop(areaStop.id);
     expect(found).not.toBeNull();
@@ -346,16 +353,20 @@ describe('AreaFareLevelRepository', () => {
   });
 
   it('updateAmount changes the amount', async () => {
+    const journey = await journeyRepo.create('Test Journey');
     const area = await areaRepo.create('Test Area');
-    const fl = await repo.create(area.id, 'Minimum', 0, 1.50);
+    const fl = await repo.create(journey.id, 'Minimum', 0, 1.50);
+    await repo.linkToArea(area.id, fl.id);
     await repo.updateAmount(fl.id, 2.50);
     const levels = await repo.getByArea(area.id);
     expect(levels[0].amount).toBe(2.50);
   });
 
   it('delete removes fare level', async () => {
+    const journey = await journeyRepo.create('Test Journey');
     const area = await areaRepo.create('Test Area');
-    const fl = await repo.create(area.id, 'Temp', 0, 1.00);
+    const fl = await repo.create(journey.id, 'Temp', 0, 1.00);
+    await repo.linkToArea(area.id, fl.id);
     await repo.delete(fl.id);
     const levels = await repo.getByArea(area.id);
     expect(levels).toHaveLength(0);
@@ -367,12 +378,14 @@ describe('AreaStopRepository', () => {
   let repo: AreaStopRepository;
   let areaRepo: AreaRepository;
   let stopRepo: StopRepository;
+  let journeyRepo: JourneyRepository;
 
   beforeEach(() => {
     db = getMemoryDatabase();
     repo = new AreaStopRepository(db);
     areaRepo = new AreaRepository(db);
     stopRepo = new StopRepository(db);
+    journeyRepo = new JourneyRepository(db);
   });
 
   afterEach(() => {
@@ -388,9 +401,11 @@ describe('AreaStopRepository', () => {
   });
 
   it('creates an area-stop link with fare level', async () => {
+    const journey = await journeyRepo.create('Test Journey');
     const area = await areaRepo.create('Test Area');
     const stop = await stopRepo.create('Test Stop', 1, 1);
-    const fl = await new AreaFareLevelRepository(db).create(area.id, 'Test Level', 0, 1.0);
+    const fl = await new AreaFareLevelRepository(db).create(journey.id, 'Test Level', 0, 1.0);
+    await new AreaFareLevelRepository(db).linkToArea(area.id, fl.id);
     const as = await repo.create(area.id, stop.id, fl.id);
     expect(as.fare_level_id).toBe(fl.id);
   });
@@ -441,11 +456,14 @@ describe('AreaStopRepository', () => {
   });
 
   it('updateFareLevel changes fare level', async () => {
+    const journey = await journeyRepo.create('Test Journey');
     const area = await areaRepo.create('Test Area');
     const stop = await stopRepo.create('Test Stop', 1, 1);
     const flRepo = new AreaFareLevelRepository(db);
-    const oldFl = await flRepo.create(area.id, 'Old', 0, 1.0);
-    const newFl = await flRepo.create(area.id, 'New', 1, 2.0);
+    const oldFl = await flRepo.create(journey.id, 'Old', 0, 1.0);
+    const newFl = await flRepo.create(journey.id, 'New', 1, 2.0);
+    await flRepo.linkToArea(area.id, oldFl.id);
+    await flRepo.linkToArea(area.id, newFl.id);
     const as = await repo.create(area.id, stop.id, oldFl.id);
     await repo.updateFareLevel(as.id, newFl.id);
     const found = await repo.getByAreaAndStop(area.id, stop.id);
@@ -453,10 +471,12 @@ describe('AreaStopRepository', () => {
   });
 
   it('updateFareLevel can clear fare level', async () => {
+    const journey = await journeyRepo.create('Test Journey');
     const area = await areaRepo.create('Test Area');
     const stop = await stopRepo.create('Test Stop', 1, 1);
     const flRepo = new AreaFareLevelRepository(db);
-    const fl = await flRepo.create(area.id, 'Some', 0, 1.0);
+    const fl = await flRepo.create(journey.id, 'Some', 0, 1.0);
+    await flRepo.linkToArea(area.id, fl.id);
     const as = await repo.create(area.id, stop.id, fl.id);
     await repo.updateFareLevel(as.id, null);
     const found = await repo.getByAreaAndStop(area.id, stop.id);

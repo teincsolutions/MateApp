@@ -99,8 +99,11 @@ describe('Integration: End-to-End Workflow', () => {
     const stop2a = await stopRepo.create('Airport Terminal', 5.6000, -0.2500);
     const stop2b = await stopRepo.create('Airport Gate', 5.6010, -0.2510);
 
-    const fl1 = await fareLevelRepo.create(area1.id, 'Minimum', 0, 2.00);
-    const fl2 = await fareLevelRepo.create(area2.id, 'Minimum', 0, 3.00);
+    const fl1 = await fareLevelRepo.create(journey.id, 'Minimum', 0, 2.00);
+    const fl2 = await fareLevelRepo.create(journey.id, 'Minimum', 0, 3.00);
+
+    await fareLevelRepo.linkToArea(area1.id, fl1.id);
+    await fareLevelRepo.linkToArea(area2.id, fl2.id);
 
     await areaStopRepo.create(area1.id, stop1a.id, fl1.id);
     await areaStopRepo.create(area1.id, stop1b.id, fl1.id);
@@ -161,7 +164,8 @@ describe('Integration: End-to-End Workflow', () => {
     // Step 10: Add a 3rd area
     const area3 = await areaRepo.create('Suburb');
     const stop3a = await stopRepo.create('Suburb Station', 5.6500, -0.3000);
-    const fl3 = await fareLevelRepo.create(area3.id, 'Minimum', 0, 2.50);
+    const fl3 = await fareLevelRepo.create(journey.id, 'Minimum', 0, 2.50);
+    await fareLevelRepo.linkToArea(area3.id, fl3.id);
     await areaStopRepo.create(area3.id, stop3a.id, fl3.id);
 
     const ja3 = await journeyAreaRepo.create(journey.id, area3.id, 3);

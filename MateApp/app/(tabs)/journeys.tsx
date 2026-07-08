@@ -49,7 +49,7 @@ export default function JourneysScreen() {
 
   // Gap #7: Review action
   const handleReview = (journey: Journey) => {
-    router.push({ pathname: '/mapping/index', params: { journeyId: journey.id } });
+    router.push({ pathname: '/mapping', params: { journeyId: journey.id } });
   };
 
   const renderJourney = (journey: Journey) => (
@@ -65,7 +65,7 @@ export default function JourneysScreen() {
         {journey.status === 'draft' ? (
           <TouchableOpacity
             style={styles.actionBtn}
-            onPress={() => router.push({ pathname: '/mapping/index', params: { journeyId: journey.id } })}
+            onPress={() => router.push({ pathname: '/mapping', params: { journeyId: journey.id } })}
           >
             <Text style={styles.actionBtnText}>Resume</Text>
           </TouchableOpacity>

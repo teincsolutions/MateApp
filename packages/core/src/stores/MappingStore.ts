@@ -9,6 +9,7 @@ interface MappingState {
   isRecording: boolean;
   setCurrentLocation: (location: LatLng | null) => void;
   addTrackPoint: (point: TrackPoint) => void;
+  setTrackPoints: (points: TrackPoint[]) => void;
   setTrackSequence: (seq: number) => void;
   setIsRecording: (recording: boolean) => void;
   reset: () => void;
@@ -21,6 +22,7 @@ export const useMappingStore = create<MappingState>((set) => ({
   isRecording: false,
   setCurrentLocation: (location) => set({ currentLocation: location }),
   addTrackPoint: (point) => set((state) => ({ trackPoints: [...state.trackPoints, point] })),
+  setTrackPoints: (points) => set({ trackPoints: points }),
   setTrackSequence: (seq) => set({ trackSequence: seq }),
   setIsRecording: (recording) => set({ isRecording: recording }),
   reset: () => set({ currentLocation: null, trackPoints: [], trackSequence: 0, isRecording: false }),

@@ -336,8 +336,11 @@ describe('Route Mapping Test Guide', () => {
         const sRepo = new StopRepository(db);
         const flRepo = new AreaFareLevelRepository(db);
         const asRepo = new AreaStopRepository(db);
+        const jRepo = new JourneyRepository(db);
         const area = await aRepo.create('Zone A');
-        const fl = await flRepo.create(area.id, 'Minimum', 0, 2.00);
+        const j = await jRepo.create('Test Journey');
+        const fl = await flRepo.create(j.id, 'Minimum', 0, 2.00);
+        await flRepo.linkToArea(area.id, fl.id);
         const stop = await sRepo.create('Stop X', 1, 1);
         await asRepo.create(area.id, stop.id, fl.id);
         const as = await asRepo.getByAreaAndStop(area.id, stop.id);
@@ -361,9 +364,13 @@ describe('Route Mapping Test Guide', () => {
         const sRepo = new StopRepository(db);
         const flRepo = new AreaFareLevelRepository(db);
         const asRepo = new AreaStopRepository(db);
+        const jRepo = new JourneyRepository(db);
         const area = await aRepo.create('Zone');
-        const flMin = await flRepo.create(area.id, 'Minimum', 0, 1.50);
-        const flExt = await flRepo.create(area.id, 'Extended', 1, 3.00);
+        const j = await jRepo.create('Test Journey');
+        const flMin = await flRepo.create(j.id, 'Minimum', 0, 1.50);
+        const flExt = await flRepo.create(j.id, 'Extended', 1, 3.00);
+        await flRepo.linkToArea(area.id, flMin.id);
+        await flRepo.linkToArea(area.id, flExt.id);
         const stop = await sRepo.create('New Stop', 1, 1);
         await asRepo.create(area.id, stop.id, flExt.id);
         const as = await asRepo.getByAreaAndStop(area.id, stop.id);
@@ -375,12 +382,16 @@ describe('Route Mapping Test Guide', () => {
         const sRepo = new StopRepository(db);
         const flRepo = new AreaFareLevelRepository(db);
         const asRepo = new AreaStopRepository(db);
+        const jRepo = new JourneyRepository(db);
         const area = await aRepo.create('Zone');
-        const flMin = await flRepo.create(area.id, 'Minimum', 0, 1.50);
+        const j = await jRepo.create('Test Journey');
+        const flMin = await flRepo.create(j.id, 'Minimum', 0, 1.50);
+        await flRepo.linkToArea(area.id, flMin.id);
         const stop = await sRepo.create('Old Stop', 1, 1);
         await asRepo.create(area.id, stop.id, flMin.id);
         // Add new fare level
-        await flRepo.create(area.id, 'Extended', 1, 3.00);
+        const flExt = await flRepo.create(j.id, 'Extended', 1, 3.00);
+        await flRepo.linkToArea(area.id, flExt.id);
         // Old stop still references Minimum
         const as = await asRepo.getByAreaAndStop(area.id, stop.id);
         expect(as!.fare_level_id).toBe(flMin.id);
@@ -575,14 +586,16 @@ describe('Route Mapping Test Guide', () => {
         const jaRepo = new JourneyAreaRepository(db);
 
         const area = await aRepo.create('Big Zone');
-        const flMin = await flRepo.create(area.id, 'Minimum', 0, 2.00);
-        const flExt = await flRepo.create(area.id, 'Extended', 1, 5.00);
+        const j = await jRepo.create('Zone Route');
+        const flMin = await flRepo.create(j.id, 'Minimum', 0, 2.00);
+        const flExt = await flRepo.create(j.id, 'Extended', 1, 5.00);
+        await flRepo.linkToArea(area.id, flMin.id);
+        await flRepo.linkToArea(area.id, flExt.id);
         const sMin = await sRepo.create('Near Stop', 5.55, -0.20);
         const sExt = await sRepo.create('Far Stop', 5.555, -0.202);
         await asRepo.create(area.id, sMin.id, flMin.id);
         await asRepo.create(area.id, sExt.id, flExt.id);
 
-        const j = await jRepo.create('Zone Route');
         await jaRepo.create(j.id, area.id, 1);
 
         const svc = makeValidationService(db);
@@ -614,12 +627,14 @@ describe('Route Mapping Test Guide', () => {
         const a2 = await aRepo.create('NoFare B');
         const s1 = await sRepo.create('Stop A', 5.60, -0.21);
         const s2 = await sRepo.create('Stop B', 5.65, -0.22);
-        const fl1 = await flRepo.create(a1.id, 'Min', 0, 1.00);
-        const fl2 = await flRepo.create(a2.id, 'Min', 0, 1.00);
+        const j = await jRepo.create('No Fare Route');
+        const fl1 = await flRepo.create(j.id, 'Min', 0, 1.00);
+        const fl2 = await flRepo.create(j.id, 'Min', 0, 1.00);
+        await flRepo.linkToArea(a1.id, fl1.id);
+        await flRepo.linkToArea(a2.id, fl2.id);
         await asRepo.create(a1.id, s1.id, fl1.id);
         await asRepo.create(a2.id, s2.id, fl2.id);
 
-        const j = await jRepo.create('No Fare Route');
         await jaRepo.create(j.id, a1.id, 1);
         await jaRepo.create(j.id, a2.id, 2);
 
@@ -674,13 +689,14 @@ describe('Route Mapping Test Guide', () => {
         const jaRepo = new JourneyAreaRepository(db);
 
         const area = await aRepo.create('Near Zone');
-        const fl = await flRepo.create(area.id, 'Min', 0, 2.00);
+        const j = await jRepo.create('Near Route');
+        const fl = await flRepo.create(j.id, 'Min', 0, 2.00);
+        await flRepo.linkToArea(area.id, fl.id);
         const stopClose = await sRepo.create('Close', 5.5500, -0.2010);
         const stopFar = await sRepo.create('Far', 5.5510, -0.2010);
         await asRepo.create(area.id, stopClose.id, fl.id);
         await asRepo.create(area.id, stopFar.id, fl.id);
 
-        const j = await jRepo.create('Near Route');
         await jaRepo.create(j.id, area.id, 1);
 
         const svc = makeValidationService(db);
@@ -721,13 +737,17 @@ describe('Route Mapping Test Guide', () => {
         const sRepo = new StopRepository(db);
         const asRepo = new AreaStopRepository(db);
         const flRepo = new AreaFareLevelRepository(db);
+        const jRepo = new JourneyRepository(db);
 
         const a1 = await aRepo.create('Orphan A');
         const a2 = await aRepo.create('Orphan B');
         const s1 = await sRepo.create('Stop A', 5.70, -0.25);
         const s2 = await sRepo.create('Stop B', 5.75, -0.26);
-        const fl = await flRepo.create(a1.id, 'Min', 0, 1.00);
-        const fl2 = await flRepo.create(a2.id, 'Min', 0, 1.00);
+        const j = await jRepo.create('Orphan Journey');
+        const fl = await flRepo.create(j.id, 'Min', 0, 1.00);
+        const fl2 = await flRepo.create(j.id, 'Min', 0, 1.00);
+        await flRepo.linkToArea(a1.id, fl.id);
+        await flRepo.linkToArea(a2.id, fl2.id);
         await asRepo.create(a1.id, s1.id, fl.id);
         await asRepo.create(a2.id, s2.id, fl2.id);
 
@@ -848,9 +868,13 @@ describe('Route Mapping Test Guide', () => {
         const jaRepo = new JourneyAreaRepository(db);
 
         const bigArea = await aRepo.create('Accra Metro');
-        const flMin = await flRepo.create(bigArea.id, 'Minimum', 0, 2.50);
-        const flExt = await flRepo.create(bigArea.id, 'Extended', 1, 5.00);
-        const flPrem = await flRepo.create(bigArea.id, 'Premium', 2, 8.00);
+        const j = await jRepo.create('Accra Loop');
+        const flMin = await flRepo.create(j.id, 'Minimum', 0, 2.50);
+        const flExt = await flRepo.create(j.id, 'Extended', 1, 5.00);
+        const flPrem = await flRepo.create(j.id, 'Premium', 2, 8.00);
+        await flRepo.linkToArea(bigArea.id, flMin.id);
+        await flRepo.linkToArea(bigArea.id, flExt.id);
+        await flRepo.linkToArea(bigArea.id, flPrem.id);
 
         const sMin = await sRepo.create('Circle', 5.55, -0.20);
         const sExt = await sRepo.create('Tema', 5.63, -0.01);
@@ -860,7 +884,6 @@ describe('Route Mapping Test Guide', () => {
         await asRepo.create(bigArea.id, sExt.id, flExt.id);
         await asRepo.create(bigArea.id, sPrem.id, flPrem.id);
 
-        const j = await jRepo.create('Accra Loop');
         await jaRepo.create(j.id, bigArea.id, 1);
 
         const svc = makeValidationService(db);

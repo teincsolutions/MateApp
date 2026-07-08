@@ -6,6 +6,10 @@ let db: Database.Database | null = null;
 
 function migrate(database: Database.Database): void {
   database.exec(`
+    DROP TABLE IF EXISTS area_stops;
+    DROP TABLE IF EXISTS area_fare_levels;
+    DROP TABLE IF EXISTS fare_levels;
+
     CREATE TABLE IF NOT EXISTS journeys (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, start_area_id TEXT, end_area_id TEXT,
       status TEXT NOT NULL DEFAULT 'draft',
@@ -33,21 +37,33 @@ function migrate(database: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_stops_lat ON stops(latitude);
     CREATE INDEX IF NOT EXISTS idx_stops_lng ON stops(longitude);
 
-    CREATE TABLE IF NOT EXISTS area_fare_levels (
-      id TEXT PRIMARY KEY, area_id TEXT NOT NULL, label TEXT NOT NULL,
-      order_no INTEGER NOT NULL DEFAULT 0, amount REAL NOT NULL DEFAULT 0,
-      FOREIGN KEY (area_id) REFERENCES areas(id)
+    CREATE TABLE IF NOT EXISTS fare_levels (
+      id TEXT PRIMARY KEY,
+      journey_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      order_no INTEGER NOT NULL DEFAULT 0,
+      amount REAL NOT NULL DEFAULT 0,
+      FOREIGN KEY (journey_id) REFERENCES journeys(id)
     );
-    CREATE INDEX IF NOT EXISTS idx_area_fare_levels ON area_fare_levels(area_id, order_no);
+    CREATE INDEX IF NOT EXISTS idx_fare_levels_journey ON fare_levels(journey_id, order_no);
+
+    CREATE TABLE IF NOT EXISTS area_fare_levels (
+      id TEXT PRIMARY KEY,
+      area_id TEXT NOT NULL,
+      fare_level_id TEXT NOT NULL,
+      FOREIGN KEY (area_id) REFERENCES areas(id),
+      FOREIGN KEY (fare_level_id) REFERENCES fare_levels(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_area_fare_levels_area ON area_fare_levels(area_id);
+    CREATE INDEX IF NOT EXISTS idx_area_fare_levels_level ON area_fare_levels(fare_level_id);
 
     CREATE TABLE IF NOT EXISTS area_stops (
       id TEXT PRIMARY KEY, area_id TEXT NOT NULL, stop_id TEXT NOT NULL,
-      fare_level_id TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      fare_level_id TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (area_id) REFERENCES areas(id),
       FOREIGN KEY (stop_id) REFERENCES stops(id),
-      FOREIGN KEY (fare_level_id) REFERENCES area_fare_levels(id)
+      FOREIGN KEY (fare_level_id) REFERENCES fare_levels(id)
     );
     CREATE INDEX IF NOT EXISTS idx_area_stops_area ON area_stops(area_id, stop_id);
     CREATE INDEX IF NOT EXISTS idx_area_stops_stop ON area_stops(stop_id);

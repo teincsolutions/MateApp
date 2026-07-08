@@ -33,7 +33,7 @@ export default function HomeScreen() {
             </View>
             <TouchableOpacity
               style={styles.resumeButton}
-              onPress={() => router.push({ pathname: '/mapping/index', params: { journeyId: draftJourney.id } })}
+              onPress={() => router.push({ pathname: '/mapping', params: { journeyId: draftJourney.id } })}
             >
               <Text style={styles.resumeButtonText}>Resume</Text>
             </TouchableOpacity>

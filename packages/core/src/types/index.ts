@@ -28,12 +28,18 @@ export interface Stop {
   updated_at: string;
 }
 
-export interface AreaFareLevel {
+export interface FareLevel {
   id: string;
-  area_id: string;
+  journey_id: string;
   label: string;
   order_no: number;
   amount: number;
+}
+
+export interface AreaFareLevel {
+  id: string;
+  area_id: string;
+  fare_level_id: string;
 }
 
 export interface AreaStop {

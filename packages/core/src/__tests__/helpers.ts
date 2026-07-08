@@ -15,7 +15,7 @@ export interface TestSeedData {
   areas: Array<{ id: string; name: string }>;
   stops: Array<{ id: string; label: string; lat: number; lng: number }>;
   journeyAreas: Array<{ id: string; areaId: string; sequence: number }>;
-  fareLevels: Array<{ id: string; areaId: string; label: string; amount: number }>;
+  fareLevels: Array<{ id: string; journeyId: string; label: string; amount: number }>;
   areaStops: Array<{ areaId: string; stopId: string }>;
   journeyFares: Array<{ fromJAId: string; toJAId: string; amount: number }>;
   trackPoints: Array<{ lat: number; lng: number }>;
@@ -30,6 +30,8 @@ export async function seedTestData(db: Database.Database): Promise<TestSeedData>
   const journeyAreaRepo = new JourneyAreaRepository(db);
   const journeyFareRepo = new JourneyFareRepository(db);
   const trackPointRepo = new TrackPointRepository(db);
+
+  const journey = await journeyRepo.create('Kejetia ↔ Suame');
 
   const area1 = await areaRepo.create('Kejetia');
   const area2 = await areaRepo.create('Ashtown');
@@ -48,12 +50,19 @@ export async function seedTestData(db: Database.Database): Promise<TestSeedData>
   const stop3b = await stopRepo.create('Suame Magazine', 5.5760, -0.2115);
   const stop3c = await stopRepo.create('Suame Station', 5.5745, -0.2125);
 
-  const fl1a = await fareLevelRepo.create(area1.id, 'Minimum', 0, 1.50);
-  const fl1b = await fareLevelRepo.create(area1.id, 'Extended', 1, 2.50);
-  const fl2a = await fareLevelRepo.create(area2.id, 'Minimum', 0, 2.00);
-  const fl2b = await fareLevelRepo.create(area2.id, 'Extended', 1, 3.00);
-  const fl3a = await fareLevelRepo.create(area3.id, 'Minimum', 0, 2.50);
-  const fl3b = await fareLevelRepo.create(area3.id, 'Extended', 1, 3.50);
+  const fl1a = await fareLevelRepo.create(journey.id, 'Minimum', 0, 1.50);
+  const fl1b = await fareLevelRepo.create(journey.id, 'Extended', 1, 2.50);
+  const fl2a = await fareLevelRepo.create(journey.id, 'Minimum', 0, 2.00);
+  const fl2b = await fareLevelRepo.create(journey.id, 'Extended', 1, 3.00);
+  const fl3a = await fareLevelRepo.create(journey.id, 'Minimum', 0, 2.50);
+  const fl3b = await fareLevelRepo.create(journey.id, 'Extended', 1, 3.50);
+
+  await fareLevelRepo.linkToArea(area1.id, fl1a.id);
+  await fareLevelRepo.linkToArea(area1.id, fl1b.id);
+  await fareLevelRepo.linkToArea(area2.id, fl2a.id);
+  await fareLevelRepo.linkToArea(area2.id, fl2b.id);
+  await fareLevelRepo.linkToArea(area3.id, fl3a.id);
+  await fareLevelRepo.linkToArea(area3.id, fl3b.id);
 
   await areaStopRepo.create(area1.id, stop1a.id, fl1a.id);
   await areaStopRepo.create(area1.id, stop1b.id, fl1a.id);
@@ -66,7 +75,6 @@ export async function seedTestData(db: Database.Database): Promise<TestSeedData>
   await areaStopRepo.create(area3.id, stop3b.id, fl3b.id);
   await areaStopRepo.create(area3.id, stop3c.id, fl3a.id);
 
-  const journey = await journeyRepo.create('Kejetia ↔ Suame');
   const ja1 = await journeyAreaRepo.create(journey.id, area1.id, 1);
   const ja2 = await journeyAreaRepo.create(journey.id, area2.id, 2);
   const ja3 = await journeyAreaRepo.create(journey.id, area3.id, 3);
@@ -119,12 +127,12 @@ export async function seedTestData(db: Database.Database): Promise<TestSeedData>
       { id: ja3.id, areaId: area3.id, sequence: 3 },
     ],
     fareLevels: [
-      { id: fl1a.id, areaId: area1.id, label: 'Minimum', amount: 1.50 },
-      { id: fl1b.id, areaId: area1.id, label: 'Extended', amount: 2.50 },
-      { id: fl2a.id, areaId: area2.id, label: 'Minimum', amount: 2.00 },
-      { id: fl2b.id, areaId: area2.id, label: 'Extended', amount: 3.00 },
-      { id: fl3a.id, areaId: area3.id, label: 'Minimum', amount: 2.50 },
-      { id: fl3b.id, areaId: area3.id, label: 'Extended', amount: 3.50 },
+      { id: fl1a.id, journeyId: journey.id, label: 'Minimum', amount: 1.50 },
+      { id: fl1b.id, journeyId: journey.id, label: 'Extended', amount: 2.50 },
+      { id: fl2a.id, journeyId: journey.id, label: 'Minimum', amount: 2.00 },
+      { id: fl2b.id, journeyId: journey.id, label: 'Extended', amount: 3.00 },
+      { id: fl3a.id, journeyId: journey.id, label: 'Minimum', amount: 2.50 },
+      { id: fl3b.id, journeyId: journey.id, label: 'Extended', amount: 3.50 },
     ],
     areaStops: [
       { areaId: area1.id, stopId: stop1a.id },

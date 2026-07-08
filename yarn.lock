@@ -1105,11 +1105,16 @@
 
 "@expo/ui@^57.0.4":
   version "57.0.4"
-  resolved "https://registry.npmjs.org/@expo/ui/-/ui-57.0.4.tgz"
+  resolved "https://registry.yarnpkg.com/@expo/ui/-/ui-57.0.4.tgz#9e2b3e52b19c6cfa069b063c3dfa5c5f24c2ac49"
   integrity sha512-QUotmKfb7GmVf+FSHvAdHeooL7JNSYOW3v4axaih45AHGmQVUKzh58uzcD4i2n3feK9tlFVDITHKAzBFagmJOg==
   dependencies:
     sf-symbols-typescript "^2.1.0"
     vaul "^1.1.2"
+
+"@expo/vector-icons@^15.0.2":
+  version "15.1.1"
+  resolved "https://registry.yarnpkg.com/@expo/vector-icons/-/vector-icons-15.1.1.tgz#4b1d2c60493c0b0536972f0a5babd5f5c85b48f4"
+  integrity sha512-Iu2VkcoI5vygbtYngm7jb4ifxElNVXQYdDrYkT7UCEIiKLeWnQY0wf2ZhHZ+Wro6Sc5TaumpKUOqDRpLi5rkvw==
 
 "@expo/ws-tunnel@^2.0.0":
   version "2.0.0"
