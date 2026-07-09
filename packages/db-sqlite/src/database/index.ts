@@ -10,7 +10,22 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   return db;
 }
 
+const SCHEMA_VERSION = 3;
+
 async function migrate(database: SQLite.SQLiteDatabase): Promise<void> {
+  await database.execAsync(`
+    CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT);
+    INSERT OR IGNORE INTO _meta (key, value) VALUES ('schema_version', '0');
+  `);
+
+  const row = await database.getFirstAsync(
+    "SELECT value FROM _meta WHERE key = 'schema_version'"
+  ) as { value: string } | null;
+
+  const currentVersion = parseInt(row?.value || '0', 10);
+
+  if (currentVersion >= SCHEMA_VERSION) return;
+
   await database.execAsync(`
     DROP TABLE IF EXISTS validation_logs;
     DROP TABLE IF EXISTS track_points;
@@ -126,6 +141,11 @@ async function migrate(database: SQLite.SQLiteDatabase): Promise<void> {
     );
     CREATE INDEX IF NOT EXISTS idx_validation_logs ON validation_logs(created_at);
   `);
+
+  await database.runAsync(
+    "UPDATE _meta SET value = ? WHERE key = 'schema_version'",
+    [String(SCHEMA_VERSION)]
+  );
 }
 
 export async function closeDatabase(): Promise<void> {

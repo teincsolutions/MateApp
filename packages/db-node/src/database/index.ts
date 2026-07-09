@@ -4,7 +4,22 @@ import os from 'os';
 
 let db: Database.Database | null = null;
 
+const SCHEMA_VERSION = 3;
+
 function migrate(database: Database.Database): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT);
+    INSERT OR IGNORE INTO _meta (key, value) VALUES ('schema_version', '0');
+  `);
+
+  const row = database.prepare(
+    "SELECT value FROM _meta WHERE key = 'schema_version'"
+  ).get() as { value: string } | undefined;
+
+  const currentVersion = parseInt(row?.value || '0', 10);
+
+  if (currentVersion >= SCHEMA_VERSION) return;
+
   database.exec(`
     DROP TABLE IF EXISTS validation_logs;
     DROP TABLE IF EXISTS track_points;
@@ -120,6 +135,10 @@ function migrate(database: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_validation_logs ON validation_logs(created_at);
   `);
+
+  database.prepare(
+    "UPDATE _meta SET value = ? WHERE key = 'schema_version'"
+  ).run(String(SCHEMA_VERSION));
 }
 
 export function getDatabase(): Database.Database {
