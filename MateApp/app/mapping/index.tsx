@@ -243,19 +243,25 @@ export default function MappingScreen() {
       Alert.alert('Error', 'GPS location not available.');
       return;
     }
-    // Enforce: if journey areas exist, prompt fares first
     if (journeyAreas.length >= 1 && activeJourneyArea) {
-      const pendingCheck = async () => {
-        if (journeyAreas.length < 2) {
-          // First new area — no fares needed yet
-          return proceedToAreaCreation();
+      if (journeyAreas.length < 2) {
+        return proceedToAreaCreation();
+      }
+      // Check if all existing areas have fares configured
+      let allFaresExist = true;
+      for (let i = 0; i < journeyAreas.length; i++) {
+        const existing = await JourneyFareRepository.getBetweenAreas(journey!.id, journeyAreas[i].area_id, activeJourneyArea.area.id);
+        const reversed = await JourneyFareRepository.getBetweenAreas(journey!.id, activeJourneyArea.area.id, journeyAreas[i].area_id);
+        if (!existing && !reversed) {
+          allFaresExist = false;
+          break;
         }
-        // Check if fares exist from all previous areas to the pending new area
-        // Open fare modal first, then after saving, proceed
-        setPendingAreaBeforeFares(null as any);
-        handleEnterFares(() => proceedToAreaCreation());
-      };
-      pendingCheck();
+      }
+      if (allFaresExist) {
+        return proceedToAreaCreation();
+      }
+      setPendingAreaBeforeFares(null as any);
+      handleEnterFares(() => proceedToAreaCreation());
       return;
     }
     proceedToAreaCreation();
@@ -336,12 +342,12 @@ export default function MappingScreen() {
         await AreaFareLevelRepository.linkToArea(area.id, selectedAreaFareLevelId);
       }
       fareLevel = { id: selectedAreaFareLevelId } as FareLevel;
-    } else if (existingLevels.length === 0) {
-      // No selection and no existing levels — create a default Minimum (0 amount)
-      fareLevel = await AreaFareLevelRepository.create(journey.id, 'Minimum', 0, 0);
-      await AreaFareLevelRepository.linkToArea(area.id, fareLevel.id);
-    } else {
+    } else if (existingLevels.length > 0) {
       fareLevel = existingLevels[0];
+    } else {
+      Alert.alert('Fare Level Required', 'Please select or create a fare level for this area.');
+      setCreatingArea(false);
+      return;
     }
     // Check if already linked, if not link with fare level
     const existingLink = await AreaStopRepository.getByAreaAndStop(area.id, stop.id);
@@ -633,33 +639,30 @@ export default function MappingScreen() {
           <RNHostView>
             <View style={styles.sheetContent}>
               <Text style={styles.modalTitle}>Enter Fares</Text>
-              <Text style={styles.modalText}>Select a fare level for each area pair. Fares are bidirectional.</Text>
-              <ScrollView style={styles.fareScroll}>
+              <Text style={styles.modalText}>Select a fare level for each area pair.</Text>
+              <ScrollView style={styles.fareScroll} keyboardShouldPersistTaps="handled">
                 {journeyAreas.map((jaFrom, i) =>
                   journeyAreas.slice(i + 1).map((jaTo) => {
                     const key = `${jaFrom.id}-${jaTo.id}`;
                     const areaFrom = areas.find(a => a.id === jaFrom.area_id);
                     const areaTo = areas.find(a => a.id === jaTo.area_id);
-                    const selectedId = fareLevelSelections[key];
                     return (
                       <View key={key} style={styles.fareRow}>
                         <Text style={styles.fareLabel}>{areaFrom?.name || '?'} → {areaTo?.name || '?'}</Text>
-                        <View style={styles.fareChipContainer}>
-                          {allJourneyLevels.map(lvl => {
-                            const sel = lvl.id === selectedId;
-                            return (
-                              <TouchableOpacity
-                                key={lvl.id}
-                                style={sel ? styles.fareChipSelected : styles.fareChipUnselected}
-                                onPress={() => setFareLevelSelections(prev => ({ ...prev, [key]: lvl.id }))}
-                              >
-                                <Text style={sel ? styles.fareChipSelectedText : styles.fareChipUnselectedText}>
-                                  GHS {lvl.amount.toFixed(2)}
-                                </Text>
-                              </TouchableOpacity>
-                            );
-                          })}
-                        </View>
+                        <FareLevelPicker
+                          fareLevels={allJourneyLevels}
+                          selectedId={fareLevelSelections[key] || null}
+                          onSelect={(flId) => setFareLevelSelections(prev => ({ ...prev, [key]: flId || '' }))}
+                          onCreateNew={async (amount) => {
+                            if (!journey) return;
+                            const label = `GHS ${amount.toFixed(2)}`;
+                            const lvls = await AreaFareLevelRepository.getByJourney(journey.id);
+                            const nextOrder = lvls.length > 0 ? Math.max(...lvls.map(l => l.order_no)) + 1 : 0;
+                            const fl = await AreaFareLevelRepository.create(journey.id, label, nextOrder, amount);
+                            setAllJourneyLevels(prev => [...prev, fl]);
+                            setFareLevelSelections(prev => ({ ...prev, [key]: fl.id }));
+                          }}
+                        />
                       </View>
                     );
                   })
@@ -781,16 +784,9 @@ const styles = StyleSheet.create({
   modalCancelText: { color: '#6B7280', fontSize: 15 },
   fareScroll: { maxHeight: 300 },
   fareRow: {
-    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
+    paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
   },
-  fareLabel: { fontSize: 14, color: '#374151', flex: 1 },
-  fareChipContainer: {
-    flexDirection: 'row', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end', marginTop: 6,
-  },
-  fareChipSelected: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: '#2563EB' },
-  fareChipSelectedText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-  fareChipUnselected: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#D1D5DB' },
-  fareChipUnselectedText: { color: '#6B7280', fontSize: 12 },
+  fareLabel: { fontSize: 14, fontWeight: '600', color: '#111827', marginBottom: 4 },
   pickerWrapper: { backgroundColor: '#F9FAFB', borderRadius: 12, borderWidth: 1, borderColor: '#D1D5DB', marginBottom: 12, overflow: 'hidden' },
   fareLevelChip: {
     paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8,
