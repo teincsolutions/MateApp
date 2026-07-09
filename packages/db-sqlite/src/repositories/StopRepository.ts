@@ -2,6 +2,12 @@ import type { IStopRepository, Stop } from '@mateapp/core';
 import { getDatabase } from '../database';
 import { uuidv4 } from '@mateapp/core';
 
+const METERS_PER_DEG_LAT = 111195;
+
+function metersPerDegLng(lat: number): number {
+  return METERS_PER_DEG_LAT * Math.cos((lat * Math.PI) / 180);
+}
+
 function haversineDistance(
   lat1: number, lng1: number,
   lat2: number, lng2: number
@@ -50,13 +56,34 @@ export class StopRepository implements IStopRepository {
 
   async findByRadius(latitude: number, longitude: number, radiusMeters: number): Promise<Stop[]> {
     const db = await getDatabase();
-    const all = (await db.getAllAsync('SELECT * FROM stops')) as Stop[];
-    return all.filter(
-      (s) => haversineDistance(latitude, longitude, s.latitude, s.longitude) <= radiusMeters
-    );
+    const dLat = radiusMeters / METERS_PER_DEG_LAT;
+    const dLng = radiusMeters / metersPerDegLng(latitude);
+    const latMin = latitude - dLat;
+    const latMax = latitude + dLat;
+    const lngMin = longitude - dLng;
+    const lngMax = longitude + dLng;
+
+    const candidates = (await db.getAllAsync(
+      `SELECT * FROM stops
+       WHERE latitude BETWEEN ? AND ?
+         AND longitude BETWEEN ? AND ?
+       ORDER BY latitude, longitude`,
+      [latMin, latMax, lngMin, lngMax]
+    )) as Stop[];
+
+    return candidates
+      .filter((s) => haversineDistance(latitude, longitude, s.latitude, s.longitude) <= Math.max(radiusMeters, s.radius))
+      .sort((a, b) =>
+        haversineDistance(latitude, longitude, a.latitude, a.longitude) -
+        haversineDistance(latitude, longitude, b.latitude, b.longitude)
+      );
   }
 
   async findNearestStop(latitude: number, longitude: number): Promise<Stop | null> {
+    for (const radius of [1000, 5000, 50000]) {
+      const stops = await this.findByRadius(latitude, longitude, radius);
+      if (stops.length > 0) return stops[0];
+    }
     const db = await getDatabase();
     const all = (await db.getAllAsync('SELECT * FROM stops')) as Stop[];
     if (all.length === 0) return null;

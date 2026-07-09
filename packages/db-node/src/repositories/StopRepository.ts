@@ -2,6 +2,12 @@ import type { IStopRepository, Stop } from '@mateapp/core';
 import type Database from 'better-sqlite3';
 import { uuidv4 } from '@mateapp/core';
 
+const METERS_PER_DEG_LAT = 111195;
+
+function metersPerDegLng(lat: number): number {
+  return METERS_PER_DEG_LAT * Math.cos((lat * Math.PI) / 180);
+}
+
 function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371000;
   const toRad = (deg: number) => (deg * Math.PI) / 180;
@@ -42,13 +48,33 @@ export class StopRepository implements IStopRepository {
   }
 
   async findByRadius(latitude: number, longitude: number, radiusMeters: number): Promise<Stop[]> {
-    const all = this.db.prepare('SELECT * FROM stops').all() as Stop[];
-    return all.filter(
-      (s) => haversineDistance(latitude, longitude, s.latitude, s.longitude) <= radiusMeters
-    );
+    const dLat = radiusMeters / METERS_PER_DEG_LAT;
+    const dLng = radiusMeters / metersPerDegLng(latitude);
+    const latMin = latitude - dLat;
+    const latMax = latitude + dLat;
+    const lngMin = longitude - dLng;
+    const lngMax = longitude + dLng;
+
+    const candidates = this.db.prepare(
+      `SELECT * FROM stops
+       WHERE latitude BETWEEN ? AND ?
+         AND longitude BETWEEN ? AND ?
+       ORDER BY latitude, longitude`
+    ).all(latMin, latMax, lngMin, lngMax) as Stop[];
+
+    return candidates
+      .filter((s) => haversineDistance(latitude, longitude, s.latitude, s.longitude) <= Math.max(radiusMeters, s.radius))
+      .sort((a, b) =>
+        haversineDistance(latitude, longitude, a.latitude, a.longitude) -
+        haversineDistance(latitude, longitude, b.latitude, b.longitude)
+      );
   }
 
   async findNearestStop(latitude: number, longitude: number): Promise<Stop | null> {
+    for (const radius of [1000, 5000, 50000]) {
+      const stops = await this.findByRadius(latitude, longitude, radius);
+      if (stops.length > 0) return stops[0];
+    }
     const all = this.db.prepare('SELECT * FROM stops').all() as Stop[];
     if (all.length === 0) return null;
     return all.reduce((nearest, stop) => {
