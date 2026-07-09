@@ -12,10 +12,16 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
 
 async function migrate(database: SQLite.SQLiteDatabase): Promise<void> {
   await database.execAsync(`
+    DROP TABLE IF EXISTS validation_logs;
+    DROP TABLE IF EXISTS track_points;
+    DROP TABLE IF EXISTS journey_fares;
+    DROP TABLE IF EXISTS journey_areas;
     DROP TABLE IF EXISTS area_stops;
     DROP TABLE IF EXISTS area_fare_levels;
     DROP TABLE IF EXISTS fare_levels;
-    DROP TABLE IF EXISTS journey_fares;
+    DROP TABLE IF EXISTS stops;
+    DROP TABLE IF EXISTS areas;
+    DROP TABLE IF EXISTS journeys;
 
     CREATE TABLE IF NOT EXISTS journeys (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, start_area_id TEXT, end_area_id TEXT,

@@ -58,6 +58,7 @@ export default function MappingScreen() {
     setJourneyAreas(jas);
 
     const allAreas: Area[] = [];
+    const seenStops = new Set<string>();
     const allStops: Stop[] = [];
     const allPolygons: { areaId: string; polygon: LatLng[] }[] = [];
     for (const ja of jas) {
@@ -68,7 +69,12 @@ export default function MappingScreen() {
           allPolygons.push({ areaId: area.id, polygon: GeometryService.polygonFromJson(area.polygon) });
         }
         const areaStops = await StopRepository.findByArea(area.id);
-        allStops.push(...areaStops);
+        for (const s of areaStops) {
+          if (!seenStops.has(s.id)) {
+            seenStops.add(s.id);
+            allStops.push(s);
+          }
+        }
       }
       if (ja.sequence === jas.length) {
         setActiveJourneyArea({ area: area!, journeyAreaId: ja.id, sequence: ja.sequence });
@@ -494,10 +500,16 @@ export default function MappingScreen() {
   };
 
   const refreshStops = async () => {
+    const seen = new Set<string>();
     const allStops: Stop[] = [];
     for (const ja of journeyAreas) {
       const areaStops = await StopRepository.findByArea(ja.area_id);
-      allStops.push(...areaStops);
+      for (const s of areaStops) {
+        if (!seen.has(s.id)) {
+          seen.add(s.id);
+          allStops.push(s);
+        }
+      }
     }
     setStops(allStops);
   };
