@@ -1,6 +1,7 @@
-import { useRouter, useFocusEffect } from 'expo-router';
+import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, FlatList } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { JourneyRepository, AreaFareLevelRepository } from '../../../adapters/index';
 import { Journey, FareLevel } from '@mateapp/core';
 
@@ -10,18 +11,45 @@ export default function FareLevelsIndexScreen() {
   const [selectedJourney, setSelectedJourney] = useState<Journey | null>(null);
   const [levels, setLevels] = useState<FareLevel[]>([]);
 
-  useFocusEffect(useCallback(() => {
-    (async () => { setJourneys(await JourneyRepository.getAll()); })();
-  }, []));
-
-  const handleSelectJourney = async (j: Journey) => {
-    setSelectedJourney(j);
+  const loadLevels = async (j: Journey) => {
     const fl = await AreaFareLevelRepository.getByJourney(j.id);
     setLevels(fl);
   };
 
+  useFocusEffect(useCallback(() => {
+    (async () => {
+      const all = await JourneyRepository.getAll();
+      setJourneys(all);
+      if (selectedJourney) {
+        const refreshed = all.find(j => j.id === selectedJourney.id);
+        if (refreshed) {
+          setSelectedJourney(refreshed);
+          await loadLevels(refreshed);
+        }
+      }
+    })();
+  }, []));
+
+  const handleSelectJourney = async (j: Journey) => {
+    setSelectedJourney(j);
+    await loadLevels(j);
+  };
+
   return (
     <View style={styles.container}>
+      <Stack.Screen
+        options={{
+          headerRight: selectedJourney
+            ? () => (
+                <TouchableOpacity
+                  onPress={() => router.push({ pathname: '/manage/fare-levels/[id]', params: { id: 'new', journeyId: selectedJourney.id } })}
+                  style={{ paddingHorizontal: 12, paddingVertical: 6 }}>
+                  <Text style={{ color: '#2563EB', fontWeight: '600', fontSize: 15 }}>+ New</Text>
+                </TouchableOpacity>
+              )
+            : undefined,
+        }}
+      />
       {!selectedJourney ? (
         <FlatList
           data={journeys}
@@ -45,7 +73,7 @@ export default function FareLevelsIndexScreen() {
           keyExtractor={l => l.id}
           contentContainerStyle={styles.list}
           renderItem={({ item }) => (
-            <TouchableOpacity style={styles.row} onPress={() => router.push({ pathname: '/manage/fare-levels/[id]', params: { id: item.id } })}>
+            <TouchableOpacity style={styles.row} onPress={() => router.push({ pathname: '/manage/fare-levels/[id]', params: { id: item.id, journeyId: selectedJourney.id } })}>
               <View>
                 <Text style={styles.rowLabel}>{item.label}</Text>
                 <Text style={styles.rowSub}>Order: {item.order_no} · GHS {item.amount.toFixed(2)}</Text>
@@ -56,7 +84,7 @@ export default function FareLevelsIndexScreen() {
           ListHeaderComponent={
             <Text style={styles.header}>{selectedJourney.name} Fare Levels</Text>
           }
-          ListEmptyComponent={<Text style={styles.empty}>No fare levels for this journey.</Text>}
+          ListEmptyComponent={<Text style={styles.empty}>No fare levels for this journey. Tap "+ New" to create one.</Text>}
         />
       )}
     </View>
@@ -67,8 +95,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F9FAFB' },
   list: { padding: 16 },
   header: { fontSize: 18, fontWeight: '600', color: '#111827', marginBottom: 12 },
-  headerRow: { marginBottom: 12 },
-  backLink: { fontSize: 15, color: '#2563EB', fontWeight: '500', marginBottom: 8 },
   row: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: '#fff', padding: 16, borderRadius: 12, marginBottom: 8,

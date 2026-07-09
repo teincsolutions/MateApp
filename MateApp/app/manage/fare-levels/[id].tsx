@@ -1,40 +1,53 @@
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
-import { AreaFareLevelRepository, JourneyRepository } from '../../../adapters/index';
+import { AreaFareLevelRepository } from '../../../adapters/index';
 import { FareLevel } from '@mateapp/core';
 
 export default function FareLevelEditScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, journeyId } = useLocalSearchParams<{ id: string; journeyId?: string }>();
+  const isNew = id === 'new';
   const [level, setLevel] = useState<FareLevel | null>(null);
   const [label, setLabel] = useState('');
   const [amount, setAmount] = useState('');
   const [saving, setSaving] = useState(false);
 
   useFocusEffect(useCallback(() => {
-    if (!id) return;
+    if (!id || isNew) return;
     (async () => {
-      const allJourneys = await JourneyRepository.getAll();
-      for (const j of allJourneys) {
-        const fls = await AreaFareLevelRepository.getByJourney(j.id);
+      if (journeyId) {
+        const fls = await AreaFareLevelRepository.getByJourney(journeyId);
         const found = fls.find(f => f.id === id);
-        if (found) { setLevel(found); setLabel(found.label); setAmount(String(found.amount)); break; }
+        if (found) { setLevel(found); setLabel(found.label); setAmount(String(found.amount)); }
       }
     })();
-  }, [id]));
+  }, [id, journeyId, isNew]));
 
   const handleSave = async () => {
-    if (!level || !label.trim()) return;
+    if (!label.trim()) return;
     setSaving(true);
     const amt = parseFloat(amount) || 0;
-    await AreaFareLevelRepository.updateAmount(level.id, amt);
-    Alert.alert('Saved', `Amount updated to GHS ${amt.toFixed(2)}. All stops referencing this level will use the new amount.`);
+
+    if (isNew) {
+      if (!journeyId) return;
+      const minLabel = label.trim();
+      const levels = await AreaFareLevelRepository.getByJourney(journeyId);
+      const nextOrder = levels.length > 0 ? Math.max(...levels.map(l => l.order_no)) + 1 : 0;
+      const fl = await AreaFareLevelRepository.create(journeyId, minLabel, nextOrder, amt);
+      Alert.alert('Created', `Fare level "${minLabel}" — GHS ${amt.toFixed(2)} created.`);
+    } else {
+      if (!level) return;
+      await AreaFareLevelRepository.updateAmount(level.id, amt);
+      Alert.alert('Saved', `Amount updated to GHS ${amt.toFixed(2)}. All stops referencing this level will use the new amount.`);
+    }
+
     setSaving(false);
     router.back();
   };
 
   const handleDelete = async () => {
+    if (isNew) return;
     Alert.alert('Delete Fare Level', 'Stops referencing this level will lose their fare reference.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
@@ -44,7 +57,7 @@ export default function FareLevelEditScreen() {
     ]);
   };
 
-  if (!level) return null;
+  if (!isNew && !level) return null;
 
   return (
     <View style={styles.container}>
@@ -55,15 +68,19 @@ export default function FareLevelEditScreen() {
         <Text style={styles.sectionTitle}>Amount (GHS)</Text>
         <TextInput style={styles.input} value={amount} onChangeText={setAmount} placeholder="0.00" keyboardType="decimal-pad" placeholderTextColor="#9CA3AF" />
 
-        <Text style={styles.meta}>Updating the amount will immediately affect all stops across all areas that reference this level.</Text>
+        {!isNew && (
+          <Text style={styles.meta}>Updating the amount will immediately affect all stops across all areas that reference this level.</Text>
+        )}
 
         <TouchableOpacity style={[styles.saveBtn, (!label.trim() || saving) && { opacity: 0.5 }]} onPress={handleSave} disabled={!label.trim() || saving}>
-          <Text style={styles.saveBtnText}>{saving ? 'Saving...' : 'Save Changes'}</Text>
+          <Text style={styles.saveBtnText}>{saving ? 'Saving...' : isNew ? 'Create Fare Level' : 'Save Changes'}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
-          <Text style={styles.deleteBtnText}>Delete Fare Level</Text>
-        </TouchableOpacity>
+        {!isNew && (
+          <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
+            <Text style={styles.deleteBtnText}>Delete Fare Level</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </View>
   );
