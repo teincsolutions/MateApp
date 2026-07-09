@@ -5,6 +5,7 @@ import {
   TextInput, ScrollView, ActivityIndicator,
 } from 'react-native';
 import MapView, { Marker, Polyline, Polygon, PROVIDER_DEFAULT } from 'react-native-maps';
+import { FareLevelPicker } from '../../components/FareLevelPicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { BottomSheet, Host, RNHostView } from '@expo/ui';
@@ -33,15 +34,15 @@ export default function MappingScreen() {
   const [showFareModal, setShowFareModal] = useState(false);
   const [showStopModal, setShowStopModal] = useState(false);
   const [newAreaName, setNewAreaName] = useState('');
-  const [newAreaFare, setNewAreaFare] = useState('');
+  const [selectedAreaFareLevelId, setSelectedAreaFareLevelId] = useState<string | null>(null);
+  const [journeyAreaFareLevels, setJourneyAreaFareLevels] = useState<FareLevel[]>([]);
   const [creatingArea, setCreatingArea] = useState(false);
   const [stopLabel, setStopLabel] = useState('');
   const [selectedFareLevelId, setSelectedFareLevelId] = useState<string | null>(null);
-  const [showNewFareLevel, setShowNewFareLevel] = useState(false);
-  const [newFareAmount, setNewFareAmount] = useState('');
   const [fareLevelSelections, setFareLevelSelections] = useState<Record<string, string>>({});
   const [allJourneyLevels, setAllJourneyLevels] = useState<FareLevel[]>([]);
   const [suggestedArea, setSuggestedArea] = useState<Area | null>(null);
+  const [suggestedAreaJourneys, setSuggestedAreaJourneys] = useState<string[]>([]);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const [pendingAreaBeforeFares, setPendingAreaBeforeFares] = useState<Area | false>(false);
   const [areaFareLevels, setAreaFareLevels] = useState<FareLevel[]>([]);
@@ -106,7 +107,7 @@ export default function MappingScreen() {
   useEffect(() => {
     if (!initialLoadDone || !journey || journeyAreas.length > 0 || !currentLocation) return;
     setNewAreaName('');
-    setNewAreaFare('');
+    setSelectedAreaFareLevelId(null);
     setSuggestedArea(null);
     const timer = setTimeout(() => setShowNewAreaModal(true), 500);
     return () => clearTimeout(timer);
@@ -162,17 +163,32 @@ export default function MappingScreen() {
       const linkedAreas = await AreaStopRepository.getByStop(existing.id);
       const areaIds = [...new Set(linkedAreas.map(a => a.area_id))];
       const areaNames: string[] = [];
+      const journeyNames: string[] = [];
       for (const aid of areaIds) {
         const a = await AreaRepository.getById(aid);
         if (a) areaNames.push(a.name);
       }
+      // Find which journeys these areas belong to
+      const allJourneys = await JourneyRepository.getAll();
+      for (const aj of allJourneys) {
+        const jas = await JourneyAreaRepository.getByJourney(aj.id);
+        const matchedAreas = jas.filter(ja => areaIds.includes(ja.area_id));
+        if (matchedAreas.length > 0 && !journeyNames.includes(aj.name)) {
+          journeyNames.push(aj.name);
+        }
+      }
       const otherAreas = areaNames.filter(n => n !== activeJourneyArea.area.name);
+      const journeyInfo = journeyNames.length > 0 ? `\n\nJourneys using this stop: ${journeyNames.join(', ')}` : '';
       const message = otherAreas.length > 0
-        ? `Stop "${existing.label}" is already used in: ${otherAreas.join(', ')}.\n\nLink it to ${activeJourneyArea.area.name} too?`
-        : `Link stop "${existing.label}" to this area?`;
+        ? `Stop "${existing.label}" is already used in: ${otherAreas.join(', ')}.${journeyInfo}\n\nLink it to ${activeJourneyArea.area.name} too?`
+        : `Link stop "${existing.label}" to this area?${journeyInfo}`;
 
       Alert.alert('Reuse Stop', message, [
         { text: 'Cancel', style: 'cancel' },
+        ...(journeyNames.length > 0 ? [{
+          text: 'View Journeys',
+          onPress: () => router.push('/(tabs)/journeys'),
+        }] : []),
         {
           text: 'Link',
           onPress: async () => {
@@ -208,21 +224,6 @@ export default function MappingScreen() {
     await updateAreaPolygon(activeJourneyArea.area.id);
     await refreshStops();
     Alert.alert('Stop Created', `Stop "${label}" added to ${activeJourneyArea.area.name}`);
-  };
-
-  const handleCreateNewFareLevel = async () => {
-    if (!journey || !activeJourneyArea) return;
-    const amount = parseFloat(newFareAmount) || 0;
-    const label = amount > 0 ? `GHS ${amount.toFixed(2)}` : 'New Level';
-    const levels = await AreaFareLevelRepository.getByJourney(journey.id);
-    const nextOrder = levels.length > 0 ? Math.max(...levels.map(l => l.order_no)) + 1 : 0;
-    const fl = await AreaFareLevelRepository.create(journey.id, label, nextOrder, amount);
-    await AreaFareLevelRepository.linkToArea(activeJourneyArea.area.id, fl.id);
-    const updated = await AreaFareLevelRepository.getByArea(activeJourneyArea.area.id);
-    setAreaFareLevels(updated);
-    setSelectedFareLevelId(fl.id);
-    setShowNewFareLevel(false);
-    setNewFareAmount('');
   };
 
   const updateAreaPolygon = async (areaId: string) => {
@@ -261,12 +262,24 @@ export default function MappingScreen() {
   };
 
   const proceedToAreaCreation = async () => {
+    if (journey) {
+      const jfl = await AreaFareLevelRepository.getByJourney(journey.id);
+      setJourneyAreaFareLevels(jfl);
+      setSelectedAreaFareLevelId(null);
+    }
     const areasWithPolygons = await AreaRepository.getAllWithPolygons();
     for (const area of areasWithPolygons) {
       if (area.polygon) {
         const polygon = GeometryService.polygonFromJson(area.polygon);
         if (GeometryService.pointInPolygon(currentLocation!, polygon)) {
           setSuggestedArea(area);
+          const allJ = await JourneyRepository.getAll();
+          const names: string[] = [];
+          for (const aj of allJ) {
+            const jas = await JourneyAreaRepository.getByJourney(aj.id);
+            if (jas.some(ja => ja.area_id === area.id)) names.push(aj.name);
+          }
+          setSuggestedAreaJourneys(names);
           setShowNewAreaModal(true);
           return;
         }
@@ -317,19 +330,16 @@ export default function MappingScreen() {
     // Create or reuse fare level for this area
     let fareLevel = null;
     const existingLevels = await AreaFareLevelRepository.getByArea(area.id);
-    if (existingLevels.length === 0) {
-      const amount = parseFloat(newAreaFare) || 0;
-      // Check if any journey-level fare matches this amount
-      const journeyLevels = await AreaFareLevelRepository.getByJourney(journey.id);
-      const existing = journeyLevels.find(l => Math.abs(l.amount - amount) < 0.01);
-      if (existing) {
-        await AreaFareLevelRepository.linkToArea(area.id, existing.id);
-        fareLevel = existing;
-      } else {
-        const label = amount > 0 ? `GHS ${amount.toFixed(2)}` : 'Minimum';
-        fareLevel = await AreaFareLevelRepository.create(journey.id, label, 0, amount);
-        await AreaFareLevelRepository.linkToArea(area.id, fareLevel.id);
+    if (selectedAreaFareLevelId) {
+      const alreadyLinked = existingLevels.find(l => l.id === selectedAreaFareLevelId);
+      if (!alreadyLinked) {
+        await AreaFareLevelRepository.linkToArea(area.id, selectedAreaFareLevelId);
       }
+      fareLevel = { id: selectedAreaFareLevelId } as FareLevel;
+    } else if (existingLevels.length === 0) {
+      // No selection and no existing levels — create a default Minimum (0 amount)
+      fareLevel = await AreaFareLevelRepository.create(journey.id, 'Minimum', 0, 0);
+      await AreaFareLevelRepository.linkToArea(area.id, fareLevel.id);
     } else {
       fareLevel = existingLevels[0];
     }
@@ -344,7 +354,7 @@ export default function MappingScreen() {
     await JourneyRepository.updateStatus(journey.id, 'draft');
     setShowNewAreaModal(false);
     setNewAreaName('');
-    setNewAreaFare('');
+    setSelectedAreaFareLevelId(null);
     setSuggestedArea(null);
     setPendingAreaBeforeFares(false);
 
@@ -381,7 +391,8 @@ export default function MappingScreen() {
     setActiveJourneyArea({ area: suggestedArea, journeyAreaId: ja.id, sequence: seq });
     setShowNewAreaModal(false);
     setSuggestedArea(null);
-    setNewAreaFare('');
+    setSuggestedAreaJourneys([]);
+    setSelectedAreaFareLevelId(null);
     setPendingAreaBeforeFares(false);
     await loadJourney();
     Alert.alert('Area Reused', `Using existing area: ${suggestedArea.name}`);
@@ -489,9 +500,8 @@ export default function MappingScreen() {
     latitude: tp.latitude,
     longitude: tp.longitude,
   }));
-
-  const handleDismissAreaModal = () => { setShowNewAreaModal(false); setSuggestedArea(null); setNewAreaName(''); setNewAreaFare(''); setCreatingArea(false); };
-  const handleDismissStopModal = () => { setShowStopModal(false); setStopLabel(''); setShowNewFareLevel(false); setNewFareAmount(''); };
+  const handleDismissAreaModal = () => { setShowNewAreaModal(false); setSuggestedArea(null); setSuggestedAreaJourneys([]); setNewAreaName(''); setSelectedAreaFareLevelId(null); setCreatingArea(false); };
+  const handleDismissStopModal = () => { setShowStopModal(false); setStopLabel(''); };
 
   return (
     <View style={{ flex: 1, backgroundColor: '#fff' }}>
@@ -573,19 +583,40 @@ export default function MappingScreen() {
               {suggestedArea ? (
                 <>
                   <Text style={styles.modalText}>Existing area found: <Text style={styles.bold}>{suggestedArea.name}</Text></Text>
+                  {suggestedAreaJourneys.length > 0 && (
+                    <Text style={styles.modalText}>Used in journeys: {suggestedAreaJourneys.join(', ')}</Text>
+                  )}
                   <TouchableOpacity style={styles.modalButton} onPress={handleUseSuggestedArea}>
                     <Text style={styles.modalButtonText}>Use "{suggestedArea.name}"</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.modalButtonSecondary} onPress={() => setSuggestedArea(null)}>
                     <Text style={styles.modalButtonTextSecondary}>Create New Area Instead</Text>
                   </TouchableOpacity>
+                  {suggestedAreaJourneys.length > 0 && (
+                    <TouchableOpacity style={styles.modalCancel} onPress={() => router.push('/(tabs)/journeys')}>
+                      <Text style={styles.modalCancelText}>View Journeys</Text>
+                    </TouchableOpacity>
+                  )}
                 </>
               ) : (
                 <>
                   <Text style={styles.modalText}>{journeyAreas.length === 0 ? 'Enter a name for your first area. A stop will be created automatically at your GPS location.' : 'Enter a name for the new area at your current location.'}</Text>
                   <TextInput style={styles.modalInput} value={newAreaName} onChangeText={setNewAreaName} placeholder="Area name (e.g. Kejetia)" placeholderTextColor="#9CA3AF" autoFocus />
-                  <Text style={styles.modalLabel}>Minimum Fare (GHS)</Text>
-                  <TextInput style={styles.modalInput} value={newAreaFare} onChangeText={setNewAreaFare} placeholder="0.00" placeholderTextColor="#9CA3AF" keyboardType="decimal-pad" />
+                  <Text style={styles.modalLabel}>Fare Level</Text>
+                  <FareLevelPicker
+                    fareLevels={journeyAreaFareLevels}
+                    selectedId={selectedAreaFareLevelId}
+                    onSelect={setSelectedAreaFareLevelId}
+                    onCreateNew={async (amount) => {
+                      if (!journey) return;
+                      const label = `GHS ${amount.toFixed(2)}`;
+                      const levels = await AreaFareLevelRepository.getByJourney(journey.id);
+                      const nextOrder = levels.length > 0 ? Math.max(...levels.map(l => l.order_no)) + 1 : 0;
+                      const fl = await AreaFareLevelRepository.create(journey.id, label, nextOrder, amount);
+                      setJourneyAreaFareLevels(prev => [...prev, fl]);
+                      setSelectedAreaFareLevelId(fl.id);
+                    }}
+                  />
                   <TouchableOpacity style={[styles.modalButton, (!newAreaName.trim() || creatingArea) && { opacity: 0.5 }]} onPress={handleCreateArea} disabled={!newAreaName.trim() || creatingArea}>
                     <Text style={styles.modalButtonText}>Create Area</Text>
                   </TouchableOpacity>
@@ -652,25 +683,22 @@ export default function MappingScreen() {
               <Text style={styles.modalLabel}>Stop Label</Text>
               <TextInput style={styles.modalInput} value={stopLabel} onChangeText={setStopLabel} placeholder="e.g. Main Station" placeholderTextColor="#9CA3AF" autoFocus onSubmitEditing={handleCreateStopFromModal} />
               <Text style={styles.modalLabel}>Fare Level</Text>
-              <View style={styles.fareLevelList}>
-                {areaFareLevels.map((fl) => (
-                  <TouchableOpacity key={fl.id} style={[styles.fareLevelChip, selectedFareLevelId === fl.id && styles.fareLevelChipSelected]} onPress={() => setSelectedFareLevelId(fl.id)}>
-                    <Text style={[styles.fareLevelChipText, selectedFareLevelId === fl.id && styles.fareLevelChipTextSelected]}>{fl.label} — GHS {fl.amount.toFixed(2)}</Text>
-                  </TouchableOpacity>
-                ))}
-                {showNewFareLevel ? (
-                  <View style={styles.newFareRow}>
-                    <TextInput style={[styles.modalInput, { flex: 1, marginBottom: 0 }]} value={newFareAmount} onChangeText={setNewFareAmount} placeholder="Amount (GHS)" keyboardType="decimal-pad" placeholderTextColor="#9CA3AF" autoFocus />
-                    <TouchableOpacity style={styles.newFareBtn} onPress={handleCreateNewFareLevel}>
-                      <Text style={styles.newFareBtnText}>Add</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <TouchableOpacity style={styles.newFareLink} onPress={() => setShowNewFareLevel(true)}>
-                    <Text style={styles.newFareLinkText}>+ New Fare Level</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
+              <FareLevelPicker
+                fareLevels={areaFareLevels}
+                selectedId={selectedFareLevelId}
+                onSelect={setSelectedFareLevelId}
+                onCreateNew={async (amount) => {
+                  if (!journey || !activeJourneyArea) return;
+                  const label = `GHS ${amount.toFixed(2)}`;
+                  const levels = await AreaFareLevelRepository.getByJourney(journey.id);
+                  const nextOrder = levels.length > 0 ? Math.max(...levels.map(l => l.order_no)) + 1 : 0;
+                  const fl = await AreaFareLevelRepository.create(journey.id, label, nextOrder, amount);
+                  await AreaFareLevelRepository.linkToArea(activeJourneyArea.area.id, fl.id);
+                  const updated = await AreaFareLevelRepository.getByArea(activeJourneyArea.area.id);
+                  setAreaFareLevels(updated);
+                  setSelectedFareLevelId(fl.id);
+                }}
+              />
               <TouchableOpacity style={[styles.modalButton, !stopLabel.trim() && { opacity: 0.5 }]} onPress={handleCreateStopFromModal} disabled={!stopLabel.trim()}>
                 <Text style={styles.modalButtonText}>Add Stop</Text>
               </TouchableOpacity>
@@ -763,9 +791,9 @@ const styles = StyleSheet.create({
   fareChipSelectedText: { color: '#fff', fontSize: 12, fontWeight: '600' },
   fareChipUnselected: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#D1D5DB' },
   fareChipUnselectedText: { color: '#6B7280', fontSize: 12 },
-  fareLevelList: { marginBottom: 16, gap: 6 },
+  pickerWrapper: { backgroundColor: '#F9FAFB', borderRadius: 12, borderWidth: 1, borderColor: '#D1D5DB', marginBottom: 12, overflow: 'hidden' },
   fareLevelChip: {
-    paddingVertical: 10, paddingHorizontal: 14, borderRadius: 8,
+    paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8,
     borderWidth: 1, borderColor: '#D1D5DB', backgroundColor: '#F9FAFB',
   },
   fareLevelChipSelected: {
