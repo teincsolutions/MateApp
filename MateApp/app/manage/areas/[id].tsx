@@ -1,6 +1,6 @@
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, Modal, FlatList } from 'react-native';
 import { AreaRepository, StopRepository, AreaStopRepository, AreaFareLevelRepository, JourneyRepository, JourneyAreaRepository } from '../../../adapters/index';
 import { Stop, FareLevel } from '@mateapp/core';
 
@@ -13,29 +13,32 @@ export default function AreaEditScreen() {
   const [journeyName, setJourneyName] = useState('');
   const [journeyCount, setJourneyCount] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [showAddStop, setShowAddStop] = useState(false);
+  const [allStops, setAllStops] = useState<Stop[]>([]);
+  const [stopSearch, setStopSearch] = useState('');
 
-  useFocusEffect(useCallback(() => {
+  const refresh = useCallback(async () => {
     if (!id) return;
-    (async () => {
-      const area = await AreaRepository.getById(id);
-      if (!area) return router.back();
-      setName(area.name);
-      const s = await StopRepository.findByArea(area.id);
-      setStops(s);
-      const fl = await AreaFareLevelRepository.getByArea(area.id);
-      setFareLevels(fl);
-      const journeys = await JourneyRepository.getAll();
-      let linkedCount = 0;
-      for (const j of journeys) {
-        const jas = await JourneyAreaRepository.getByJourney(j.id);
-        if (jas.some(ja => ja.area_id === id)) {
-          linkedCount++;
-          if (!journeyName) setJourneyName(j.name);
-        }
+    const area = await AreaRepository.getById(id);
+    if (!area) return router.back();
+    setName(area.name);
+    const s = await StopRepository.findByArea(area.id);
+    setStops(s);
+    const fl = await AreaFareLevelRepository.getByArea(area.id);
+    setFareLevels(fl);
+    const journeys = await JourneyRepository.getAll();
+    let linkedCount = 0;
+    for (const j of journeys) {
+      const jas = await JourneyAreaRepository.getByJourney(j.id);
+      if (jas.some(ja => ja.area_id === id)) {
+        linkedCount++;
+        if (!journeyName) setJourneyName(j.name);
       }
-      setJourneyCount(linkedCount);
-    })();
-  }, [id]));
+    }
+    setJourneyCount(linkedCount);
+  }, [id]);
+
+  useFocusEffect(useCallback(() => { refresh(); }, [refresh]));
 
   const handleDeleteArea = () => {
     if (journeyCount > 0) {
@@ -71,6 +74,25 @@ export default function AreaEditScreen() {
     Alert.alert('Saved', 'Area name updated.');
   };
 
+  const handleOpenAddStop = async () => {
+    const existing = await StopRepository.getAll();
+    const linkedIds = new Set(stops.map(s => s.id));
+    setAllStops(existing.filter(s => !linkedIds.has(s.id)));
+    setStopSearch('');
+    setShowAddStop(true);
+  };
+
+  const handleAddStop = async (stop: Stop) => {
+    await AreaStopRepository.create(id!, stop.id);
+    setShowAddStop(false);
+    await refresh();
+    Alert.alert('Added', `"${stop.label}" added to this area.`);
+  };
+
+  const filteredAddStops = stopSearch.trim()
+    ? allStops.filter(s => s.label.toLowerCase().includes(stopSearch.toLowerCase()))
+    : allStops;
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -84,7 +106,12 @@ export default function AreaEditScreen() {
           <Text style={styles.readonly}>Journey: {journeyName}</Text>
         ) : null}
 
-        <Text style={styles.sectionTitle}>Stops ({stops.length})</Text>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Stops ({stops.length})</Text>
+          <TouchableOpacity style={styles.addBtn} onPress={handleOpenAddStop}>
+            <Text style={styles.addBtnText}>+ Add Stop</Text>
+          </TouchableOpacity>
+        </View>
         {stops.length === 0 ? (
           <Text style={styles.empty}>No stops in this area.</Text>
         ) : (
@@ -113,6 +140,39 @@ export default function AreaEditScreen() {
           <Text style={styles.deleteBtnText}>Delete Area</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <Modal visible={showAddStop} transparent animationType="slide">
+        <TouchableOpacity style={styles.modalBackdrop} onPress={() => setShowAddStop(false)} />
+        <View style={styles.modalSheet}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Add Existing Stop</Text>
+            <TouchableOpacity onPress={() => setShowAddStop(false)}>
+              <Text style={styles.doneBtn}>Done</Text>
+            </TouchableOpacity>
+          </View>
+          <TextInput
+            style={styles.modalSearch}
+            value={stopSearch}
+            onChangeText={setStopSearch}
+            placeholder="Search stops..."
+            placeholderTextColor="#9CA3AF"
+            autoFocus
+          />
+          <FlatList
+            data={filteredAddStops}
+            keyExtractor={s => s.id}
+            renderItem={({ item }) => (
+              <TouchableOpacity style={styles.modalOption} onPress={() => handleAddStop(item)}>
+                <View>
+                  <Text style={styles.modalOptionLabel}>{item.label}</Text>
+                  <Text style={styles.modalOptionSub}>{item.latitude.toFixed(4)}, {item.longitude.toFixed(4)}</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={<Text style={styles.empty}>No matching stops found.</Text>}
+          />
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -120,10 +180,13 @@ export default function AreaEditScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F9FAFB' },
   scroll: { padding: 20 },
-  sectionTitle: { fontSize: 14, fontWeight: '600', color: '#374151', marginTop: 20, marginBottom: 8 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, marginBottom: 8 },
+  sectionTitle: { fontSize: 14, fontWeight: '600', color: '#374151' },
   input: { backgroundColor: '#fff', borderRadius: 12, padding: 14, fontSize: 16, borderWidth: 1, borderColor: '#D1D5DB', color: '#111827', marginBottom: 8 },
   saveBtn: { backgroundColor: '#2563EB', paddingVertical: 12, borderRadius: 10, alignItems: 'center', marginBottom: 8 },
   saveBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  addBtn: { backgroundColor: '#2563EB', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8 },
+  addBtnText: { color: '#fff', fontWeight: '600', fontSize: 13 },
   readonly: { fontSize: 14, color: '#6B7280', marginBottom: 4 },
   empty: { fontSize: 14, color: '#9CA3AF', marginTop: 4 },
   stopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', padding: 12, borderRadius: 8, marginBottom: 6, borderWidth: 1, borderColor: '#E5E7EB' },
@@ -133,4 +196,13 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 13, color: '#2563EB', fontWeight: '500' },
   deleteBtn: { backgroundColor: '#FEE2E2', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 24 },
   deleteBtnText: { color: '#DC2626', fontSize: 15, fontWeight: '600' },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
+  modalSheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '70%', paddingBottom: 30 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  modalTitle: { fontSize: 17, fontWeight: '700', color: '#111827' },
+  doneBtn: { fontSize: 15, fontWeight: '600', color: '#2563EB' },
+  modalSearch: { margin: 16, backgroundColor: '#F9FAFB', borderRadius: 12, padding: 14, fontSize: 15, borderWidth: 1, borderColor: '#D1D5DB', color: '#111827' },
+  modalOption: { paddingVertical: 14, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  modalOptionLabel: { fontSize: 15, fontWeight: '600', color: '#111827', marginBottom: 2 },
+  modalOptionSub: { fontSize: 13, color: '#6B7280' },
 });

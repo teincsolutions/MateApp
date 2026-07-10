@@ -48,11 +48,10 @@ export default function StopEditScreen() {
   };
 
   const handleDelete = () => {
-    if (linkedAreas.length > 0) {
-      Alert.alert('Cannot Delete', 'This stop is linked to areas. Remove it from all areas first.');
-      return;
-    }
-    Alert.alert('Delete Stop', 'This cannot be undone.', [
+    const areaWarning = linkedAreas.length > 0
+      ? `This stop is linked to: ${linkedAreas.join(', ')}.\n\nDeleting it will also remove it from these areas. Continue?`
+      : 'This cannot be undone.';
+    Alert.alert('Delete Stop', areaWarning, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
         await StopRepository.delete(stop!.id);
@@ -88,11 +87,9 @@ export default function StopEditScreen() {
           <Text style={styles.saveBtnText}>{saving ? 'Saving...' : 'Save Changes'}</Text>
         </TouchableOpacity>
 
-        {linkedAreas.length === 0 && (
-          <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
-            <Text style={styles.deleteBtnText}>Delete Stop</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
+          <Text style={styles.deleteBtnText}>Delete Stop</Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
