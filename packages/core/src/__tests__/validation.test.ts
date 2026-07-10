@@ -116,12 +116,11 @@ describe('ValidationService', () => {
   });
 
   describe('stop not found', () => {
-    it('GPS far from any stop → estimates nearest stop', async () => {
+    it('GPS far from any stop (>25km) → status stop_not_found', async () => {
       const result = await service.validate(6.5000, -1.0000, 6.6000, -1.1000);
-      expect(result.estimatedPickup).toBe(true);
-      expect(result.estimatedDest).toBe(true);
-      expect(result.pickupStop).not.toBeNull();
-      expect(result.destStop).not.toBeNull();
+      expect(result.status).toBe('stop_not_found');
+      expect(result.pickupStop).toBeNull();
+      expect(result.destStop).toBeNull();
     });
 
     it('no stops at all → status stop_not_found', async () => {

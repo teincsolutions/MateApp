@@ -202,6 +202,12 @@ export default function MappingScreen() {
     setNewAreaName("");
     setSelectedAreaFareLevelId(null);
     setSuggestedArea(null);
+    reverseGeocode(
+      currentLocation.latitude,
+      currentLocation.longitude,
+    ).then((street) => {
+      if (street) setNewAreaName(street);
+    });
     const timer = setTimeout(() => setShowNewAreaModal(true), 500);
     return () => clearTimeout(timer);
   }, [initialLoadDone, journey?.id, journeyAreas.length, currentLocation]);
@@ -358,6 +364,15 @@ export default function MappingScreen() {
     setSelectedFareLevelId(levels.length > 0 ? levels[0].id : null);
     setStopLabel("");
     setShowStopModal(true);
+    if (currentLocation) {
+      const street = await reverseGeocode(
+        currentLocation.latitude,
+        currentLocation.longitude,
+      );
+      if (street) {
+        setStopLabel(street);
+      }
+    }
   };
 
   const handleCreateStopFromModal = async () => {
