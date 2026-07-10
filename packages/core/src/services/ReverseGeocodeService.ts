@@ -22,18 +22,31 @@ export async function reverseGeocode(
   }
 
   const baseUrl = process.env.EXPO_PUBLIC_REVERSE_GEOCODE_BASE_URL;
-  if (!baseUrl) return null;
+  if (!baseUrl) {
+    console.warn('[ReverseGeocode] EXPO_PUBLIC_REVERSE_GEOCODE_BASE_URL is not set');
+    return null;
+  }
 
   try {
     const url = `${baseUrl}/api/v1/places/reverse-geocode?latitude=${latitude}&longitude=${longitude}`;
+    console.log('[ReverseGeocode] Fetching:', url);
     const response = await fetch(url);
-    if (!response.ok) return null;
+    console.log('[ReverseGeocode] Status:', response.status);
+    if (!response.ok) {
+      console.warn('[ReverseGeocode] Request failed:', response.status, response.statusText);
+      return null;
+    }
     const json = await response.json();
+    console.log('[ReverseGeocode] Response:', JSON.stringify(json));
     const street = json?.data?.street;
-    if (typeof street !== 'string') return null;
+    if (typeof street !== 'string') {
+      console.warn('[ReverseGeocode] No street in response:', JSON.stringify(json));
+      return null;
+    }
     cache.set(key, { street, timestamp: Date.now() });
     return street;
-  } catch {
+  } catch (err) {
+    console.warn('[ReverseGeocode] Error:', err);
     return null;
   }
 }
