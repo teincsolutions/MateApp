@@ -4,7 +4,7 @@ import os from 'os';
 
 let db: Database.Database | null = null;
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 function migrate(database: Database.Database): void {
   database.exec(`

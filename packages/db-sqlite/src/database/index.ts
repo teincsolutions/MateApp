@@ -10,7 +10,7 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   return db;
 }
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 async function migrate(database: SQLite.SQLiteDatabase): Promise<void> {
   await database.execAsync(`
