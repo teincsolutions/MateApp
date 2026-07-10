@@ -912,7 +912,7 @@ describe('Route Mapping Test Guide', () => {
         // Minimum fare when destination is Minimum-level stop
         const r1 = await svc.validate(5.63, -0.01, 5.55, -0.20);
         expect(r1.fareType).toBe('area');
-        expect(r1.fare).toBe(2.50);
+        expect(r1.fare).toBe(5.00);
 
         // Extended fare when destination is Extended-level stop
         const r2 = await svc.validate(5.55, -0.20, 5.63, -0.01);

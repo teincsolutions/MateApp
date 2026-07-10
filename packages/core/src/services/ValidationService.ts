@@ -114,7 +114,7 @@ export class ValidationService {
     // Step 6: Calculate fare
     if (result.pickupArea.id === result.destArea.id) {
       result.fareType = 'area';
-      result.fare = await this.getIntraAreaFare(result.destArea.id, result.destStop!.id);
+      result.fare = await this.getIntraAreaFare(result.pickupArea.id, result.pickupStop!, result.destStop!);
     } else {
       result.fareType = 'journey';
       result.fare = await this.getInterAreaFare(result.journey.id, result.pickupArea.id, result.destArea.id);
@@ -180,15 +180,58 @@ export class ValidationService {
     return null;
   }
 
-  async getIntraAreaFare(areaId: string, stopId: string): Promise<number | null> {
-    const areaStop = await this.deps.areaStopRepo.getByAreaAndStop(areaId, stopId);
-    if (areaStop && areaStop.fare_level_id) {
-      const fareLevel = await this.deps.areaFareLevelRepo.getByAreaStop(areaStop.id);
-      if (fareLevel) return fareLevel.amount;
+  async getIntraAreaFare(areaId: string, pickupStop: Stop, destStop: Stop): Promise<number | null> {
+    // Get all area_stops with their stops and fare levels
+    const areaStops = await this.deps.areaStopRepo.getByArea(areaId);
+    if (areaStops.length === 0) return null;
+
+    // Fetch all stops in the area
+    const stopIds = areaStops.map(as => as.stop_id);
+    const stops = await Promise.all(stopIds.map(id => this.deps.stopRepo.getById(id)));
+    const stopMap = new Map(stops.filter(Boolean).map(s => [s!.id, s!]));
+
+    // Find A1: reference point — geographically northernmost stop (smallest latitude)
+    const stopsArray = [...stopMap.values()];
+    if (stopsArray.length === 0) return null;
+    stopsArray.sort((a, b) => a.latitude - b.latitude);
+    const a1 = stopsArray[0];
+
+    // Compute trip distance: pickup → destination
+    const tripDist = GeometryService.haversineDistance(
+      pickupStop.latitude, pickupStop.longitude,
+      destStop.latitude, destStop.longitude,
+    );
+
+    // Build: fare_level_id → closest stop to A1 that uses it
+    const flStopDist = new Map<string, number>(); // fare_level_id → distance from A1
+    for (const as of areaStops) {
+      if (!as.fare_level_id) continue;
+      const stop = stopMap.get(as.stop_id);
+      if (!stop) continue;
+      const dist = GeometryService.haversineDistance(a1.latitude, a1.longitude, stop.latitude, stop.longitude);
+      if (!flStopDist.has(as.fare_level_id) || dist < flStopDist.get(as.fare_level_id)!) {
+        flStopDist.set(as.fare_level_id, dist);
+      }
     }
-    const fareLevels = await this.deps.areaFareLevelRepo.getByArea(areaId);
-    if (fareLevels.length > 0) return fareLevels[0].amount;
-    return null;
+
+    // Find the fare level with reference distance closest to tripDist
+    let bestFlId: string | null = null;
+    let bestDiff = Infinity;
+
+    for (const [flId, refDist] of flStopDist) {
+      const diff = Math.abs(tripDist - refDist);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestFlId = flId;
+      }
+    }
+
+    if (!bestFlId) return null;
+
+    // Resolve fare level amount
+    const journeyLevels = await this.deps.areaFareLevelRepo.getByArea(areaId);
+    const matched = journeyLevels.find(l => l.id === bestFlId);
+    return matched ? matched.amount : null;
   }
 
   async logResult(result: ValidationResult, pickupLat: number, pickupLng: number, destLat: number, destLng: number): Promise<void> {

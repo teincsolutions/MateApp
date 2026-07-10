@@ -4,7 +4,7 @@ import {
   useLocalSearchParams,
   useFocusEffect,
 } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -30,6 +30,7 @@ import {
 } from "react-native-safe-area-context";
 import * as Location from "expo-location";
 import { BottomSheet, Host, RNHostView } from "@expo/ui";
+import { Ionicons } from "@expo/vector-icons";
 
 import {
   JourneyRepository,
@@ -54,7 +55,6 @@ import {
   TrackPoint,
   FareLevel,
 } from "@mateapp/core";
-import { Ionicons } from "@expo/vector-icons";
 
 export default function MappingScreen() {
   const router = useRouter();
@@ -736,87 +736,172 @@ export default function MappingScreen() {
     setShowAreaPicker(false);
   };
 
+  const areaSheetContent = useMemo(
+    () => (
+      <ScrollView
+        contentContainerStyle={styles.sheetContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text style={styles.modalTitle}>
+          {journeyAreas.length === 0 ? "Create First Area" : "New Area"}
+        </Text>
+        {journeyAreas.length === 0 && (
+          <Text style={styles.modalHint}>
+            Start by naming the area at your current location.
+          </Text>
+        )}
+        {suggestedArea ? (
+          <>
+            <Text style={styles.modalText}>
+              Existing area found:{" "}
+              <Text style={styles.bold}>{suggestedArea.name}</Text>
+            </Text>
+            {suggestedAreaJourneys.length > 0 && (
+              <Text style={styles.modalText}>
+                Used in journeys: {suggestedAreaJourneys.join(", ")}
+              </Text>
+            )}
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={handleUseSuggestedArea}
+            >
+              <Text style={styles.modalButtonText}>
+                Use "{suggestedArea.name}"
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.modalButtonSecondary}
+              onPress={() => setSuggestedArea(null)}
+            >
+              <Text style={styles.modalButtonTextSecondary}>
+                Create New Area Instead
+              </Text>
+            </TouchableOpacity>
+            {suggestedAreaJourneys.length > 0 && (
+              <TouchableOpacity
+                style={styles.modalCancel}
+                onPress={() => router.push("/(tabs)/journeys")}
+              >
+                <Text style={styles.modalCancelText}>View Journeys</Text>
+              </TouchableOpacity>
+            )}
+          </>
+        ) : (
+          <>
+            <Text style={styles.modalText}>
+              {journeyAreas.length === 0
+                ? "Enter a name for your first area. A stop will be created automatically at your GPS location."
+                : "Enter a name for the new area at your current location."}
+            </Text>
+            <TextInput
+              style={styles.modalInput}
+              value={newAreaName}
+              onChangeText={setNewAreaName}
+              placeholder="Area name (e.g. Kejetia)"
+              placeholderTextColor="#9CA3AF"
+              autoFocus
+            />
+            <Text style={styles.modalLabel}>Fare Level</Text>
+            <FareLevelPicker
+              key={journeyAreaFareLevels.length}
+              fareLevels={journeyAreaFareLevels}
+              selectedId={selectedAreaFareLevelId}
+              onSelect={setSelectedAreaFareLevelId}
+              onCreateNew={async (amount) => {
+                if (!journey) return;
+                const label = `GHS ${amount.toFixed(2)}`;
+                const levels = await AreaFareLevelRepository.getByJourney(
+                  journey.id,
+                );
+                const nextOrder =
+                  levels.length > 0
+                    ? Math.max(...levels.map((l) => l.order_no)) + 1
+                    : 0;
+                const fl = await AreaFareLevelRepository.create(
+                  journey.id,
+                  label,
+                  nextOrder,
+                  amount,
+                );
+                setJourneyAreaFareLevels((prev) => [...prev, fl]);
+                setSelectedAreaFareLevelId(fl.id);
+              }}
+            />
+            <TouchableOpacity
+              style={[
+                styles.modalButton,
+                (!newAreaName.trim() || creatingArea) && { opacity: 0.5 },
+              ]}
+              onPress={handleCreateArea}
+              disabled={!newAreaName.trim() || creatingArea}
+            >
+              <Text style={styles.modalButtonText}>Create Area</Text>
+            </TouchableOpacity>
+          </>
+        )}
+        <TouchableOpacity
+          style={styles.modalCancel}
+          onPress={handleDismissAreaModal}
+        >
+          <Text style={styles.modalCancelText}>Cancel</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    ),
+    [
+      journeyAreas.length,
+      suggestedArea,
+      suggestedAreaJourneys,
+      newAreaName,
+      selectedAreaFareLevelId,
+      journeyAreaFareLevels,
+      creatingArea,
+    ],
+  );
+
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
-      <Stack.Screen
-        options={{
-          title: journey?.name || "Journey",
-          header: () => (
-            <SafeAreaView
-              edges={["top"]}
-              style={{
-                backgroundColor: "#fff",
-                flexDirection: "row",
-                padding: 10,
-                justifyContent: "space-between",
-              }}
-            >
-              <TouchableOpacity
-                onPress={() => router.back()}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  padding: 8,
-                  width: 40,
-                  height: 40,
-                  marginEnd: 20,
-                  borderRadius: 40,
-                  gap: 8,
-                  elevation: 5,
-                  backgroundColor: "#e3e5eb",
-                }}
-              >
-                <Ionicons
-                  name={
-                    Platform.OS === "ios"
-                      ? "chevron-back"
-                      : "arrow-back-outline"
-                  }
-                  size={24}
-                  color="black"
-                />
-              </TouchableOpacity>
-              {/* Full width row with absolutely zero default padding or fixed widths */}
-              <View style={{ flex: 1 }}>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 10,
-                  }}
-                >
-                  <Text style={styles.headerTitle} numberOfLines={1}>
-                    {journey?.name || "Journey"}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.areaSwitcher}
-                  onPress={() => setShowAreaPicker(true)}
-                >
-                  <Text style={styles.areaLabel} numberOfLines={1}>
-                    {activeJourneyArea
-                      ? activeJourneyArea.area.name
-                      : "No area"}
-                  </Text>
-                  {journeyAreas.length > 1 && (
-                    <Text style={styles.areaSwitcherArrow}>▼</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-              <View style={[styles.headerRightGroup]}>
-                {isRecording && <View style={styles.recordingDot} />}
-                {gpsAccuracy !== null && (
-                  <Text style={styles.gpsAccuracy}>
-                    ±{gpsAccuracy.toFixed(1)}m
-                  </Text>
-                )}
-              </View>
-            </SafeAreaView>
-          ),
-        }}
-      />
+      <Stack.Screen options={{ headerShown: false }} />
       <Host style={{ flex: 1 }}>
         <View style={styles.container}>
+          <View style={styles.customHeader}>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={styles.backBtn}
+            >
+              <Ionicons
+                name={
+                  Platform.OS === "ios" ? "chevron-back" : "arrow-back-outline"
+                }
+                size={24}
+                color="black"
+              />
+            </TouchableOpacity>
+            <View style={{ flex: 1, alignItems: "flex-start" }}>
+              <Text style={styles.headerTitle} numberOfLines={1}>
+                {journey?.name || "Journey"}
+              </Text>
+              <TouchableOpacity
+                style={styles.areaSwitcher}
+                onPress={() => setShowAreaPicker(true)}
+              >
+                <Text style={styles.areaLabel} numberOfLines={1}>
+                  {activeJourneyArea ? activeJourneyArea.area.name : "No area"}
+                </Text>
+                {journeyAreas.length > 1 && (
+                  <Text style={styles.areaSwitcherArrow}>▼</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+            <View style={styles.headerRightGroup}>
+              {isRecording && <View style={styles.recordingDot} />}
+              {gpsAccuracy !== null && (
+                <Text style={styles.gpsAccuracy}>
+                  ±{gpsAccuracy.toFixed(1)}m
+                </Text>
+              )}
+            </View>
+          </View>
+
           <MapView
             ref={mapRef}
             style={styles.map}
@@ -910,116 +995,7 @@ export default function MappingScreen() {
           onDismiss={handleDismissAreaModal}
           snapPoints={["full"]}
         >
-          <RNHostView>
-            <ScrollView
-              contentContainerStyle={styles.sheetContent}
-              keyboardShouldPersistTaps="handled"
-            >
-              <Text style={styles.modalTitle}>
-                {journeyAreas.length === 0 ? "Create First Area" : "New Area"}
-              </Text>
-              {journeyAreas.length === 0 && (
-                <Text style={styles.modalHint}>
-                  Start by naming the area at your current location.
-                </Text>
-              )}
-              {suggestedArea ? (
-                <>
-                  <Text style={styles.modalText}>
-                    Existing area found:{" "}
-                    <Text style={styles.bold}>{suggestedArea.name}</Text>
-                  </Text>
-                  {suggestedAreaJourneys.length > 0 && (
-                    <Text style={styles.modalText}>
-                      Used in journeys: {suggestedAreaJourneys.join(", ")}
-                    </Text>
-                  )}
-                  <TouchableOpacity
-                    style={styles.modalButton}
-                    onPress={handleUseSuggestedArea}
-                  >
-                    <Text style={styles.modalButtonText}>
-                      Use "{suggestedArea.name}"
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.modalButtonSecondary}
-                    onPress={() => setSuggestedArea(null)}
-                  >
-                    <Text style={styles.modalButtonTextSecondary}>
-                      Create New Area Instead
-                    </Text>
-                  </TouchableOpacity>
-                  {suggestedAreaJourneys.length > 0 && (
-                    <TouchableOpacity
-                      style={styles.modalCancel}
-                      onPress={() => router.push("/(tabs)/journeys")}
-                    >
-                      <Text style={styles.modalCancelText}>View Journeys</Text>
-                    </TouchableOpacity>
-                  )}
-                </>
-              ) : (
-                <>
-                  <Text style={styles.modalText}>
-                    {journeyAreas.length === 0
-                      ? "Enter a name for your first area. A stop will be created automatically at your GPS location."
-                      : "Enter a name for the new area at your current location."}
-                  </Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    value={newAreaName}
-                    onChangeText={setNewAreaName}
-                    placeholder="Area name (e.g. Kejetia)"
-                    placeholderTextColor="#9CA3AF"
-                    autoFocus
-                  />
-                  <Text style={styles.modalLabel}>Fare Level</Text>
-                  <FareLevelPicker
-                    key={journeyAreaFareLevels.length}
-                    fareLevels={journeyAreaFareLevels}
-                    selectedId={selectedAreaFareLevelId}
-                    onSelect={setSelectedAreaFareLevelId}
-                    onCreateNew={async (amount) => {
-                      if (!journey) return;
-                      const label = `GHS ${amount.toFixed(2)}`;
-                      const levels = await AreaFareLevelRepository.getByJourney(
-                        journey.id,
-                      );
-                      const nextOrder =
-                        levels.length > 0
-                          ? Math.max(...levels.map((l) => l.order_no)) + 1
-                          : 0;
-                      const fl = await AreaFareLevelRepository.create(
-                        journey.id,
-                        label,
-                        nextOrder,
-                        amount,
-                      );
-                      setJourneyAreaFareLevels((prev) => [...prev, fl]);
-                      setSelectedAreaFareLevelId(fl.id);
-                    }}
-                  />
-                  <TouchableOpacity
-                    style={[
-                      styles.modalButton,
-                      (!newAreaName.trim() || creatingArea) && { opacity: 0.5 },
-                    ]}
-                    onPress={handleCreateArea}
-                    disabled={!newAreaName.trim() || creatingArea}
-                  >
-                    <Text style={styles.modalButtonText}>Create Area</Text>
-                  </TouchableOpacity>
-                </>
-              )}
-              <TouchableOpacity
-                style={styles.modalCancel}
-                onPress={handleDismissAreaModal}
-              >
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </RNHostView>
+          <RNHostView>{areaSheetContent}</RNHostView>
         </BottomSheet>
 
         <BottomSheet
@@ -1219,8 +1195,26 @@ export default function MappingScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
+  customHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+  },
+  backBtn: {
+    backgroundColor: "#E5E7EB",
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
   headerTitle: { fontSize: 14, fontWeight: "700", color: "#111827" },
-  headerRightGroup: { flexDirection: "column", alignItems: "center", gap: 10 },
+  headerRightGroup: { flexDirection: "row", alignItems: "center", gap: 10 },
   areaLabel: { fontSize: 12, color: "#6B7280" },
   areaSwitcher: {
     flexDirection: "row",
@@ -1229,7 +1223,7 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingVertical: 4,
   },
-  areaSwitcherArrow: { fontSize: 12, color: "#9CA3AF", marginTop: 1 },
+  areaSwitcherArrow: { fontSize: 8, color: "#9CA3AF", marginTop: 1 },
   recordingDot: {
     width: 8,
     height: 8,
