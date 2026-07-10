@@ -46,6 +46,7 @@ import {
   GeometryService,
   LatLng,
   reverseGeocode,
+  autocomplete,
   useJourneyStore,
   useMappingStore,
   useSettingsStore,
@@ -56,6 +57,7 @@ import {
   TrackPoint,
   FareLevel,
 } from "@mateapp/core";
+import type { AutocompleteSuggestion } from "@mateapp/core";
 
 export default function MappingScreen() {
   const router = useRouter();
@@ -121,6 +123,18 @@ export default function MappingScreen() {
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const [areaFareLevels, setAreaFareLevels] = useState<FareLevel[]>([]);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
+  const [areaSuggestions, setAreaSuggestions] = useState<
+    AutocompleteSuggestion[]
+  >([]);
+  const [stopSuggestions, setStopSuggestions] = useState<
+    AutocompleteSuggestion[]
+  >([]);
+  const areaAutocompleteTimer = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const stopAutocompleteTimer = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   const loadJourney = useCallback(async () => {
     if (!journeyId) return;
@@ -763,6 +777,44 @@ export default function MappingScreen() {
     setShowAreaPicker(false);
   };
 
+  const handleAreaNameChange = (text: string) => {
+    setNewAreaName(text);
+    if (areaAutocompleteTimer.current)
+      clearTimeout(areaAutocompleteTimer.current);
+    if (text.length < 2) {
+      setAreaSuggestions([]);
+      return;
+    }
+    areaAutocompleteTimer.current = setTimeout(async () => {
+      if (!currentLocation) return;
+      const suggestions = await autocomplete(
+        text,
+        currentLocation.latitude,
+        currentLocation.longitude,
+      );
+      setAreaSuggestions(suggestions);
+    }, 300);
+  };
+
+  const handleStopLabelChange = (text: string) => {
+    setStopLabel(text);
+    if (stopAutocompleteTimer.current)
+      clearTimeout(stopAutocompleteTimer.current);
+    if (text.length < 2) {
+      setStopSuggestions([]);
+      return;
+    }
+    stopAutocompleteTimer.current = setTimeout(async () => {
+      if (!currentLocation) return;
+      const suggestions = await autocomplete(
+        text,
+        currentLocation.latitude,
+        currentLocation.longitude,
+      );
+      setStopSuggestions(suggestions);
+    }, 300);
+  };
+
   const areaSheetContent = useMemo(
     () => (
       <ScrollView
@@ -830,11 +882,45 @@ export default function MappingScreen() {
             <TextInput
               style={styles.modalInput}
               value={newAreaName}
-              onChangeText={setNewAreaName}
+              onChangeText={handleAreaNameChange}
+              onBlur={() => {
+                if (areaAutocompleteTimer.current)
+                  clearTimeout(areaAutocompleteTimer.current);
+                setAreaSuggestions([]);
+              }}
               placeholder="Area name (e.g. Kejetia)"
               placeholderTextColor="#9CA3AF"
               autoFocus
             />
+            {areaSuggestions.length > 0 && (
+              <View style={styles.suggestionsList}>
+                {areaSuggestions.map((s, i) => (
+                  <TouchableOpacity
+                    key={s.placeId || `area-${i}`}
+                    style={styles.suggestionItem}
+                    onPress={() => {
+                      if (areaAutocompleteTimer.current)
+                        clearTimeout(areaAutocompleteTimer.current);
+                      setNewAreaName(s.primaryText);
+                      setAreaSuggestions([]);
+                    }}
+                  >
+                    <Text
+                      style={styles.suggestionPrimary}
+                      numberOfLines={1}
+                    >
+                      {s.primaryText}
+                    </Text>
+                    <Text
+                      style={styles.suggestionSecondary}
+                      numberOfLines={1}
+                    >
+                      {s.secondaryText}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
             <Text style={styles.modalLabel}>Fare Level</Text>
             <FareLevelPicker
               key={journeyAreaFareLevels.length}
@@ -889,6 +975,7 @@ export default function MappingScreen() {
       selectedAreaFareLevelId,
       journeyAreaFareLevels,
       creatingArea,
+      areaSuggestions,
     ],
   );
 
@@ -1129,12 +1216,46 @@ export default function MappingScreen() {
               <TextInput
                 style={styles.modalInput}
                 value={stopLabel}
-                onChangeText={setStopLabel}
+                onChangeText={handleStopLabelChange}
+                onBlur={() => {
+                  if (stopAutocompleteTimer.current)
+                    clearTimeout(stopAutocompleteTimer.current);
+                  setStopSuggestions([]);
+                }}
                 placeholder="e.g. Main Station"
                 placeholderTextColor="#9CA3AF"
                 autoFocus
                 onSubmitEditing={handleCreateStopFromModal}
               />
+              {stopSuggestions.length > 0 && (
+                <View style={styles.suggestionsList}>
+                  {stopSuggestions.map((s, i) => (
+                    <TouchableOpacity
+                      key={s.placeId || `stop-${i}`}
+                      style={styles.suggestionItem}
+                      onPress={() => {
+                        if (stopAutocompleteTimer.current)
+                          clearTimeout(stopAutocompleteTimer.current);
+                        setStopLabel(s.primaryText);
+                        setStopSuggestions([]);
+                      }}
+                    >
+                      <Text
+                        style={styles.suggestionPrimary}
+                        numberOfLines={1}
+                      >
+                        {s.primaryText}
+                      </Text>
+                      <Text
+                        style={styles.suggestionSecondary}
+                        numberOfLines={1}
+                      >
+                        {s.secondaryText}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
               <Text style={styles.modalLabel}>Fare Level</Text>
               <FareLevelPicker
                 fareLevels={areaFareLevels}
@@ -1431,5 +1552,31 @@ const styles = StyleSheet.create({
   sheetContent: {
     padding: 24,
     gap: 8,
+  },
+  suggestionsList: {
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    marginTop: -12,
+    marginBottom: 12,
+    maxHeight: 200,
+    overflow: "hidden",
+  },
+  suggestionItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  suggestionPrimary: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#111827",
+  },
+  suggestionSecondary: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: 2,
   },
 });
