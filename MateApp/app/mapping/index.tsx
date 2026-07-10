@@ -45,6 +45,7 @@ import {
 import {
   GeometryService,
   LatLng,
+  reverseGeocode,
   useJourneyStore,
   useMappingStore,
   useSettingsStore,
@@ -439,6 +440,15 @@ export default function MappingScreen() {
     }
     setSuggestedArea(null);
     setShowNewAreaModal(true);
+    if (currentLocation) {
+      const street = await reverseGeocode(
+        currentLocation.latitude,
+        currentLocation.longitude,
+      );
+      if (street && !newAreaName) {
+        setNewAreaName(street);
+      }
+    }
   };
 
   const handleCreateArea = async () => {

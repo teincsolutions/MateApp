@@ -71,17 +71,11 @@ export class StopRepository implements IStopRepository {
   }
 
   async findNearestStop(latitude: number, longitude: number): Promise<Stop | null> {
-    for (const radius of [1000, 5000, 50000]) {
+    for (const radius of [1000, 5000, 25000]) {
       const stops = await this.findByRadius(latitude, longitude, radius);
       if (stops.length > 0) return stops[0];
     }
-    const all = this.db.prepare('SELECT * FROM stops').all() as Stop[];
-    if (all.length === 0) return null;
-    return all.reduce((nearest, stop) => {
-      const d = haversineDistance(latitude, longitude, stop.latitude, stop.longitude);
-      const nearestD = haversineDistance(latitude, longitude, nearest.latitude, nearest.longitude);
-      return d < nearestD ? stop : nearest;
-    });
+    return null;
   }
 
   async delete(id: string): Promise<void> {
