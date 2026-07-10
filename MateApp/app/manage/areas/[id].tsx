@@ -12,6 +12,7 @@ export default function AreaEditScreen() {
   const [fareLevels, setFareLevels] = useState<FareLevel[]>([]);
   const [journeyName, setJourneyName] = useState('');
   const [journeyCount, setJourneyCount] = useState(0);
+  const [saving, setSaving] = useState(false);
 
   useFocusEffect(useCallback(() => {
     if (!id) return;
@@ -62,11 +63,22 @@ export default function AreaEditScreen() {
     }
   };
 
+  const handleSaveName = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    await AreaRepository.updateName(id!, name.trim());
+    setSaving(false);
+    Alert.alert('Saved', 'Area name updated.');
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.sectionTitle}>Area Name</Text>
-        <TextInput style={styles.input} value={name} onChangeText={setName} editable={false} />
+        <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Area name" placeholderTextColor="#9CA3AF" />
+        <TouchableOpacity style={[styles.saveBtn, (!name.trim() || saving) && { opacity: 0.5 }]} onPress={handleSaveName} disabled={!name.trim() || saving}>
+          <Text style={styles.saveBtnText}>{saving ? 'Saving...' : 'Update Name'}</Text>
+        </TouchableOpacity>
 
         {journeyName ? (
           <Text style={styles.readonly}>Journey: {journeyName}</Text>
@@ -109,7 +121,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F9FAFB' },
   scroll: { padding: 20 },
   sectionTitle: { fontSize: 14, fontWeight: '600', color: '#374151', marginTop: 20, marginBottom: 8 },
-  input: { backgroundColor: '#E5E7EB', borderRadius: 12, padding: 14, fontSize: 16, color: '#6B7280', marginBottom: 8 },
+  input: { backgroundColor: '#fff', borderRadius: 12, padding: 14, fontSize: 16, borderWidth: 1, borderColor: '#D1D5DB', color: '#111827', marginBottom: 8 },
+  saveBtn: { backgroundColor: '#2563EB', paddingVertical: 12, borderRadius: 10, alignItems: 'center', marginBottom: 8 },
+  saveBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
   readonly: { fontSize: 14, color: '#6B7280', marginBottom: 4 },
   empty: { fontSize: 14, color: '#9CA3AF', marginTop: 4 },
   stopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', padding: 12, borderRadius: 8, marginBottom: 6, borderWidth: 1, borderColor: '#E5E7EB' },

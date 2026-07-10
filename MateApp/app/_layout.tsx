@@ -11,7 +11,7 @@ export default function RootLayout() {
       <StatusBar style="dark" />
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="mapping" options={{ headerShown: false, presentation: 'fullScreenModal' }} />
+        <Stack.Screen name="mapping" options={{ headerBackButtonDisplayMode: 'minimal' }} />
         <Stack.Screen name="journey/new" options={{ title: 'New Journey', presentation: 'modal' }} />
         <Stack.Screen name="manage" options={{ title: 'Manage Data', headerBackButtonDisplayMode: 'minimal' }} />
         <Stack.Screen name="manage/stops" options={{ title: 'Stops' }} />

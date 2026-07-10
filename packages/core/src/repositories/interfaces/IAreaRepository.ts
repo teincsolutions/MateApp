@@ -6,6 +6,7 @@ export interface IAreaRepository {
   getAll(): Promise<Area[]>;
   getByName(name: string): Promise<Area | null>;
   updatePolygon(id: string, polygon: string): Promise<void>;
+  updateName(id: string, name: string): Promise<void>;
   getAllWithPolygons(): Promise<Area[]>;
   delete(id: string): Promise<void>;
 }

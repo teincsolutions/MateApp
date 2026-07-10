@@ -32,6 +32,12 @@ export class AreaRepository implements IAreaRepository {
     ).run(polygon, new Date().toISOString(), id);
   }
 
+  async updateName(id: string, name: string): Promise<void> {
+    this.db.prepare(
+      'UPDATE areas SET name = ?, updated_at = ? WHERE id = ?'
+    ).run(name, new Date().toISOString(), id);
+  }
+
   async getAllWithPolygons(): Promise<Area[]> {
     return this.db.prepare('SELECT * FROM areas WHERE polygon IS NOT NULL ORDER BY name').all() as Area[];
   }

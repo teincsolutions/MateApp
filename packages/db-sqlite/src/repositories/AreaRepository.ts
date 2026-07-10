@@ -37,6 +37,14 @@ export class AreaRepository implements IAreaRepository {
     );
   }
 
+  async updateName(id: string, name: string): Promise<void> {
+    const db = await getDatabase();
+    await db.runAsync(
+      'UPDATE areas SET name = ?, updated_at = ? WHERE id = ?',
+      [name, new Date().toISOString(), id]
+    );
+  }
+
   async getAllWithPolygons(): Promise<Area[]> {
     const db = await getDatabase();
     return (await db.getAllAsync('SELECT * FROM areas WHERE polygon IS NOT NULL ORDER BY name')) as Area[];

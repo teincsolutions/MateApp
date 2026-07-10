@@ -1,4 +1,9 @@
-import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
+import {
+  Stack,
+  useRouter,
+  useLocalSearchParams,
+  useFocusEffect,
+} from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
@@ -9,6 +14,8 @@ import {
   TextInput,
   ScrollView,
   ActivityIndicator,
+  Pressable,
+  Platform,
 } from "react-native";
 import MapView, {
   Marker,
@@ -17,7 +24,10 @@ import MapView, {
   PROVIDER_DEFAULT,
 } from "react-native-maps";
 import { FareLevelPicker } from "../../components/FareLevelPicker";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import * as Location from "expo-location";
 import { BottomSheet, Host, RNHostView } from "@expo/ui";
 
@@ -44,6 +54,7 @@ import {
   TrackPoint,
   FareLevel,
 } from "@mateapp/core";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function MappingScreen() {
   const router = useRouter();
@@ -85,6 +96,7 @@ export default function MappingScreen() {
   const [showNewAreaModal, setShowNewAreaModal] = useState(false);
   const [showFareModal, setShowFareModal] = useState(false);
   const [showStopModal, setShowStopModal] = useState(false);
+  const [showAreaPicker, setShowAreaPicker] = useState(false);
   const [newAreaName, setNewAreaName] = useState("");
   const [selectedAreaFareLevelId, setSelectedAreaFareLevelId] = useState<
     string | null
@@ -219,7 +231,11 @@ export default function MappingScreen() {
             longitude: pos.coords.longitude,
           };
           const prev = lastLocationRef.current;
-          if (!prev || Math.abs(loc.latitude - prev.lat) > 0.00002 || Math.abs(loc.longitude - prev.lng) > 0.00002) {
+          if (
+            !prev ||
+            Math.abs(loc.latitude - prev.lat) > 0.00002 ||
+            Math.abs(loc.longitude - prev.lng) > 0.00002
+          ) {
             lastLocationRef.current = { lat: loc.latitude, lng: loc.longitude };
             setCurrentLocation(loc);
           }
@@ -715,40 +731,97 @@ export default function MappingScreen() {
     setStopLabel("");
   };
 
+  const handleSwitchArea = (ja: JA, area: Area) => {
+    setActiveJourneyArea({ area, journeyAreaId: ja.id, sequence: ja.sequence });
+    setShowAreaPicker(false);
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
-      <Host style={{ flex: 1 }}>
-        <View style={styles.container}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()}>
-              <Text style={styles.backBtn}>Back</Text>
-            </TouchableOpacity>
-            <View style={styles.headerInfo}>
-              <View style={styles.headerTitleRow}>
-                <Text style={styles.headerTitle} numberOfLines={1}>
-                  {journey?.name || "Journey"}
-                </Text>
-                {isRecording && <View style={styles.recordingDot} />}
+      <Stack.Screen
+        options={{
+          title: journey?.name || "Journey",
+          header: () => (
+            <SafeAreaView
+              edges={["top"]}
+              style={{
+                backgroundColor: "#fff",
+                flexDirection: "row",
+                padding: 10,
+                justifyContent: "space-between",
+              }}
+            >
+              <TouchableOpacity
+                onPress={() => router.back()}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  padding: 8,
+                  width: 40,
+                  height: 40,
+                  marginEnd: 20,
+                  borderRadius: 40,
+                  gap: 8,
+                  elevation: 5,
+                  backgroundColor: "#e3e5eb",
+                }}
+              >
+                <Ionicons
+                  name={
+                    Platform.OS === "ios"
+                      ? "chevron-back"
+                      : "arrow-back-outline"
+                  }
+                  size={24}
+                  color="black"
+                />
+              </TouchableOpacity>
+              {/* Full width row with absolutely zero default padding or fixed widths */}
+              <View style={{ flex: 1 }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 10,
+                  }}
+                >
+                  <Text style={styles.headerTitle} numberOfLines={1}>
+                    {journey?.name || "Journey"}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.areaSwitcher}
+                  onPress={() => setShowAreaPicker(true)}
+                >
+                  <Text style={styles.areaLabel} numberOfLines={1}>
+                    {activeJourneyArea
+                      ? activeJourneyArea.area.name
+                      : "No area"}
+                  </Text>
+                  {journeyAreas.length > 1 && (
+                    <Text style={styles.areaSwitcherArrow}>▼</Text>
+                  )}
+                </TouchableOpacity>
               </View>
-              <View style={styles.headerSubRow}>
-                <Text style={styles.headerArea} numberOfLines={1}>
-                  {activeJourneyArea ? activeJourneyArea.area.name : "No area"}
-                </Text>
+              <View style={[styles.headerRightGroup]}>
+                {isRecording && <View style={styles.recordingDot} />}
                 {gpsAccuracy !== null && (
                   <Text style={styles.gpsAccuracy}>
                     ±{gpsAccuracy.toFixed(1)}m
                   </Text>
                 )}
               </View>
-            </View>
-          </View>
-
+            </SafeAreaView>
+          ),
+        }}
+      />
+      <Host style={{ flex: 1 }}>
+        <View style={styles.container}>
           <MapView
             ref={mapRef}
             style={styles.map}
             provider={PROVIDER_DEFAULT}
             showsUserLocation
-            followsUserLocation
             initialRegion={{
               latitude: currentLocation?.latitude || 5.6037,
               longitude: currentLocation?.longitude || -0.187,
@@ -903,6 +976,7 @@ export default function MappingScreen() {
                   />
                   <Text style={styles.modalLabel}>Fare Level</Text>
                   <FareLevelPicker
+                    key={journeyAreaFareLevels.length}
                     fareLevels={journeyAreaFareLevels}
                     selectedId={selectedAreaFareLevelId}
                     onSelect={setSelectedAreaFareLevelId}
@@ -1102,6 +1176,42 @@ export default function MappingScreen() {
             </ScrollView>
           </RNHostView>
         </BottomSheet>
+
+        <BottomSheet
+          isPresented={showAreaPicker}
+          onDismiss={() => setShowAreaPicker(false)}
+          snapPoints={["half"]}
+        >
+          <RNHostView>
+            <ScrollView contentContainerStyle={styles.sheetContent}>
+              <Text style={styles.modalTitle}>Switch Area</Text>
+              {journeyAreas.map((ja) => {
+                const area = areas.find((a) => a.id === ja.area_id);
+                const isActive = activeJourneyArea?.area.id === area?.id;
+                return (
+                  <TouchableOpacity
+                    key={ja.id}
+                    style={[
+                      styles.areaOption,
+                      isActive && styles.areaOptionActive,
+                    ]}
+                    onPress={() => area && handleSwitchArea(ja, area)}
+                  >
+                    <Text
+                      style={[
+                        styles.areaOptionLabel,
+                        isActive && styles.areaOptionLabelActive,
+                      ]}
+                    >
+                      {ja.sequence}. {area?.name || "?"}
+                    </Text>
+                    {isActive && <Text style={styles.areaOptionCheck}>●</Text>}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </RNHostView>
+        </BottomSheet>
       </Host>
     </View>
   );
@@ -1109,38 +1219,37 @@ export default function MappingScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
-  header: {
+  headerTitle: { fontSize: 14, fontWeight: "700", color: "#111827" },
+  headerRightGroup: { flexDirection: "column", alignItems: "center", gap: 10 },
+  areaLabel: { fontSize: 12, color: "#6B7280" },
+  areaSwitcher: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
+    alignSelf: "flex-start",
+    gap: 4,
+    paddingVertical: 4,
   },
-  backBtn: {
-    color: "#2563EB",
-    fontSize: 16,
-    fontWeight: "500",
-    marginRight: 12,
-  },
-  headerInfo: { flex: 1 },
-  headerTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  headerTitle: { fontSize: 16, fontWeight: "700", color: "#111827", flex: 1 },
+  areaSwitcherArrow: { fontSize: 12, color: "#9CA3AF", marginTop: 1 },
   recordingDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: "#DC2626",
   },
-  headerSubRow: {
+  gpsAccuracy: { fontSize: 11, color: "#9CA3AF", fontWeight: "500" },
+  areaOption: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    marginTop: 2,
+    justifyContent: "space-between",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
   },
-  headerArea: { fontSize: 13, color: "#6B7280", flex: 1 },
-  gpsAccuracy: { fontSize: 11, color: "#9CA3AF", fontWeight: "500" },
+  areaOptionActive: { backgroundColor: "#EBF5FF" },
+  areaOptionLabel: { fontSize: 15, color: "#374151" },
+  areaOptionLabelActive: { color: "#2563EB", fontWeight: "600" },
+  areaOptionCheck: { fontSize: 12, color: "#2563EB" },
   map: { flex: 1 },
   actionBar: {
     flexDirection: "row",
