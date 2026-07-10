@@ -115,9 +115,9 @@ export default function MappingScreen() {
   >({});
   const [allJourneyLevels, setAllJourneyLevels] = useState<FareLevel[]>([]);
   const [suggestedArea, setSuggestedArea] = useState<Area | null>(null);
-  const [suggestedAreaJourneys, setSuggestedAreaJourneys] = useState<string[]>(
-    [],
-  );
+  const [suggestedAreaJourneys, setSuggestedAreaJourneys] = useState<
+    { id: string; name: string }[]
+  >([]);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const [areaFareLevels, setAreaFareLevels] = useState<FareLevel[]>([]);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
@@ -442,12 +442,14 @@ export default function MappingScreen() {
         if (GeometryService.pointInPolygon(currentLocation!, polygon)) {
           setSuggestedArea(area);
           const allJ = await JourneyRepository.getAll();
-          const names: string[] = [];
+          const result: { id: string; name: string }[] = [];
           for (const aj of allJ) {
             const jas = await JourneyAreaRepository.getByJourney(aj.id);
-            if (jas.some((ja) => ja.area_id === area.id)) names.push(aj.name);
+            if (jas.some((ja) => ja.area_id === area.id)) {
+              result.push({ id: aj.id, name: aj.name });
+            }
           }
-          setSuggestedAreaJourneys(names);
+          setSuggestedAreaJourneys(result);
           setShowNewAreaModal(true);
           return;
         }
@@ -783,7 +785,7 @@ export default function MappingScreen() {
             </Text>
             {suggestedAreaJourneys.length > 0 && (
               <Text style={styles.modalText}>
-                Used in journeys: {suggestedAreaJourneys.join(", ")}
+                Used in journeys: {suggestedAreaJourneys.map((j) => j.name).join(", ")}
               </Text>
             )}
             <TouchableOpacity
@@ -802,14 +804,21 @@ export default function MappingScreen() {
                 Create New Area Instead
               </Text>
             </TouchableOpacity>
-            {suggestedAreaJourneys.length > 0 && (
+            {suggestedAreaJourneys.map((j) => (
               <TouchableOpacity
+                key={j.id}
                 style={styles.modalCancel}
-                onPress={() => router.push("/(tabs)/journeys")}
+                onPress={() => {
+                  handleDismissAreaModal();
+                  router.push({
+                    pathname: "/mapping",
+                    params: { journeyId: j.id },
+                  });
+                }}
               >
-                <Text style={styles.modalCancelText}>View Journeys</Text>
+                <Text style={styles.modalCancelText}>View "{j.name}"</Text>
               </TouchableOpacity>
-            )}
+            ))}
           </>
         ) : (
           <>
