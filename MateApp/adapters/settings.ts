@@ -1,7 +1,5 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useSettingsStore } from '@mateapp/core';
-
-const SETTINGS_KEY = 'mateapp-settings';
 
 interface PersistedSettings {
   gpsInterval: number;
@@ -10,8 +8,10 @@ interface PersistedSettings {
 
 export async function loadSettings(): Promise<void> {
   try {
-    const raw = await AsyncStorage.getItem(SETTINGS_KEY);
-    if (!raw) return;
+    const path = FileSystem.documentDirectory + 'mateapp-settings.json';
+    const info = await FileSystem.getInfoAsync(path);
+    if (!info.exists) return;
+    const raw = await FileSystem.readAsStringAsync(path);
     const data: PersistedSettings = JSON.parse(raw);
     useSettingsStore.setState({
       gpsInterval: data.gpsInterval ?? 5000,
@@ -28,7 +28,8 @@ export async function saveSettings(
 ): Promise<void> {
   try {
     const data: PersistedSettings = { gpsInterval, minDistance };
-    await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(data));
+    const path = FileSystem.documentDirectory + 'mateapp-settings.json';
+    await FileSystem.writeAsStringAsync(path, JSON.stringify(data));
   } catch {
     // ignore — settings lost on next reload is acceptable
   }
