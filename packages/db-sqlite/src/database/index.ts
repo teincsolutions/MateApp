@@ -10,7 +10,7 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   return db;
 }
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 async function migrate(database: SQLite.SQLiteDatabase): Promise<void> {
   await database.execAsync(`
@@ -58,12 +58,13 @@ async function migrate(database: SQLite.SQLiteDatabase): Promise<void> {
 
     CREATE TABLE IF NOT EXISTS stops (
       id TEXT PRIMARY KEY, label TEXT NOT NULL, latitude REAL NOT NULL,
-      longitude REAL NOT NULL, radius REAL NOT NULL DEFAULT 50,
+      longitude REAL NOT NULL, radius REAL NOT NULL DEFAULT 50, seq INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_stops_lat ON stops(latitude);
     CREATE INDEX IF NOT EXISTS idx_stops_lng ON stops(longitude);
+    CREATE INDEX IF NOT EXISTS idx_stops_seq ON stops(seq);
 
     CREATE TABLE IF NOT EXISTS fare_levels (
       id TEXT PRIMARY KEY,

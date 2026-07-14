@@ -34,7 +34,7 @@ export default function StopEditScreen() {
   const handleSave = async () => {
     if (!stop || !label.trim()) return;
     setSaving(true);
-    const newStop = await StopRepository.create(label.trim(), stop.latitude, stop.longitude, parseFloat(radius) || 50);
+    const newStop = await StopRepository.create(label.trim(), stop.latitude, stop.longitude, parseFloat(radius) || 50, stop.seq);
     for (const areaName of linkedAreas) {
       const area = await AreaRepository.getByName(areaName);
       if (area) {

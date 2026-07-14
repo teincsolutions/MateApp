@@ -25,13 +25,13 @@ function haversineDistance(
 }
 
 export class StopRepository implements IStopRepository {
-  async create(label: string, latitude: number, longitude: number, radius?: number): Promise<Stop> {
+  async create(label: string, latitude: number, longitude: number, radius?: number, seq?: number): Promise<Stop> {
     const db = await getDatabase();
     const id = uuidv4();
     const now = new Date().toISOString();
     await db.runAsync(
-      'INSERT INTO stops (id, label, latitude, longitude, radius, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [id, label, latitude, longitude, radius ?? 50, now, now]
+      'INSERT INTO stops (id, label, latitude, longitude, radius, seq, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, label, latitude, longitude, radius ?? 50, seq ?? 0, now, now]
     );
     return (await db.getFirstAsync('SELECT * FROM stops WHERE id = ?', [id])) as Stop;
   }
@@ -43,13 +43,13 @@ export class StopRepository implements IStopRepository {
 
   async getAll(): Promise<Stop[]> {
     const db = await getDatabase();
-    return (await db.getAllAsync('SELECT * FROM stops ORDER BY label')) as Stop[];
+    return (await db.getAllAsync('SELECT * FROM stops ORDER BY seq, label')) as Stop[];
   }
 
   async findByArea(areaId: string): Promise<Stop[]> {
     const db = await getDatabase();
     return (await db.getAllAsync(
-      'SELECT s.* FROM stops s INNER JOIN area_stops a_s ON s.id = a_s.stop_id WHERE a_s.area_id = ? ORDER BY s.label',
+      'SELECT s.* FROM stops s INNER JOIN area_stops a_s ON s.id = a_s.stop_id WHERE a_s.area_id = ? ORDER BY s.seq, s.label',
       [areaId]
     )) as Stop[];
   }

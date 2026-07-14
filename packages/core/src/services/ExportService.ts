@@ -77,7 +77,7 @@ export class ExportService {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(lvlRows), 'FareLevels');
 
     // Fare Summary sheet — human-readable unified view
-    const summaryRows: string[][] = [['Area', 'Stops / Destination', 'Fare (GHS)']];
+    const summaryRows: string[][] = [['Area', 'Stops / Destination', 'Latitude', 'Longitude', 'Fare (GHS)']];
     for (const area of areas) {
       const areaStops = await this.deps.stopRepo.findByArea(area.id);
       for (const stop of areaStops) {
@@ -85,7 +85,7 @@ export class ExportService {
         const fl = areaStopLink?.fare_level_id
           ? await this.deps.areaFareLevelRepo.getByAreaStop(areaStopLink.id)
           : null;
-        summaryRows.push([area.name, stop.label, fl ? fl.amount.toFixed(2) : '-']);
+        summaryRows.push([area.name, stop.label, String(stop.latitude), String(stop.longitude), fl ? fl.amount.toFixed(2) : '-']);
       }
       // Add inter-area fares from this area to later areas
       for (const jaTo of journeyAreas) {
@@ -94,14 +94,14 @@ export class ExportService {
         if (fare) {
           const fl = fareLevels.find(l => l.id === fare.fare_level_id);
           const toName = areaNameMap.get(jaTo.area_id) || '';
-          summaryRows.push([area.name, toName, fl ? fl.amount.toFixed(2) : '-']);
+          summaryRows.push([area.name, toName, '-', '-', fl ? fl.amount.toFixed(2) : '-']);
         }
       }
     }
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryRows), 'Fare Summary');
 
     // Stop Fares sheet — per-stop fare levels within areas
-    const stopFareRows: string[][] = [['Area', 'Stop', 'Fare Level', 'Amount (GHS)']];
+    const stopFareRows: string[][] = [['Area', 'Stop', 'Latitude', 'Longitude', 'Fare Level', 'Amount (GHS)']];
     for (const area of areas) {
       const areaStops = await this.deps.stopRepo.findByArea(area.id);
       for (const stop of areaStops) {
@@ -109,7 +109,7 @@ export class ExportService {
         const fl = areaStopLink?.fare_level_id
           ? await this.deps.areaFareLevelRepo.getByAreaStop(areaStopLink.id)
           : null;
-        stopFareRows.push([area.name, stop.label, fl?.label || '-', fl ? fl.amount.toFixed(2) : '-']);
+        stopFareRows.push([area.name, stop.label, String(stop.latitude), String(stop.longitude), fl?.label || '-', fl ? fl.amount.toFixed(2) : '-']);
       }
     }
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(stopFareRows), 'Stop Fares');

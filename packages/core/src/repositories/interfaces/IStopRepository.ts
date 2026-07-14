@@ -1,7 +1,7 @@
 import { Stop } from '../../types';
 
 export interface IStopRepository {
-  create(label: string, latitude: number, longitude: number, radius?: number): Promise<Stop>;
+  create(label: string, latitude: number, longitude: number, radius?: number, seq?: number): Promise<Stop>;
   getById(id: string): Promise<Stop | null>;
   getAll(): Promise<Stop[]>;
   findByArea(areaId: string): Promise<Stop[]>;

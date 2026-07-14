@@ -398,10 +398,13 @@ export default function MappingScreen() {
 
   const createStop = async (label: string, fareLevelId: string | null) => {
     if (!currentLocation || !activeJourneyArea) return;
+    const nextSeq = stops.length > 0 ? Math.max(...stops.map((s) => s.seq)) + 1 : 0;
     const stop = await StopRepository.create(
       label,
       currentLocation.latitude,
       currentLocation.longitude,
+      undefined,
+      nextSeq,
     );
     // Gap #2: Pass fare level when creating area-stop link
     await AreaStopRepository.create(
@@ -518,10 +521,13 @@ export default function MappingScreen() {
     if (existingStops.length > 0) {
       stop = existingStops[0];
     } else {
+      const nextSeq = stops.length > 0 ? Math.max(...stops.map((s) => s.seq)) + 1 : 0;
       stop = await StopRepository.create(
         suggestedArea ? `${area.name} Stop` : `${name || area.name} Stop`,
         currentLocation.latitude,
         currentLocation.longitude,
+        undefined,
+        nextSeq,
       );
     }
     // Create or reuse fare level for this area
@@ -607,10 +613,13 @@ export default function MappingScreen() {
       50,
     );
     if (existingStops.length === 0) {
+      const nextSeq = stops.length > 0 ? Math.max(...stops.map((s) => s.seq)) + 1 : 0;
       const stop = await StopRepository.create(
         `${suggestedArea.name} Stop`,
         currentLocation.latitude,
         currentLocation.longitude,
+        undefined,
+        nextSeq,
       );
       const levels = await AreaFareLevelRepository.getByArea(suggestedArea.id);
       await AreaStopRepository.create(suggestedArea.id, stop.id, levels[0]?.id);

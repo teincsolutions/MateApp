@@ -24,6 +24,7 @@ export interface Stop {
   latitude: number;
   longitude: number;
   radius: number;
+  seq: number;
   created_at: string;
   updated_at: string;
 }
