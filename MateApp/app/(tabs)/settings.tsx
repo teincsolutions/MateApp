@@ -9,10 +9,14 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { gpsInterval, minDistance, setGpsInterval, setMinDistance } = useSettingsStore();
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => { loadSettings(); }, []);
+  const loaded = useRef(false);
 
   useEffect(() => {
+    loadSettings().then(() => { loaded.current = true; }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!loaded.current) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(
       () => saveSettings(gpsInterval, minDistance),
