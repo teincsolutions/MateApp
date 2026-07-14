@@ -1,11 +1,27 @@
+import { useEffect, useRef } from 'react';
 import { useRouter } from 'expo-router';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSettingsStore } from '@mateapp/core';
+import { loadSettings, saveSettings } from '../../adapters/settings';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { gpsInterval, minDistance, setGpsInterval, setMinDistance } = useSettingsStore();
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => { loadSettings(); }, []);
+
+  useEffect(() => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(
+      () => saveSettings(gpsInterval, minDistance),
+      500,
+    );
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [gpsInterval, minDistance]);
 
   return (
     <SafeAreaView style={styles.container}>
