@@ -43,9 +43,29 @@ export class AreaRepository implements IAreaRepository {
   }
 
   async delete(id: string): Promise<void> {
+    const journeyAreas = this.db.prepare(
+      'SELECT id FROM journey_areas WHERE area_id = ?'
+    ).all(id) as { id: string }[];
+
+    if (journeyAreas.length > 0) {
+      const placeholders = journeyAreas.map(() => '?').join(',');
+      const jaIds = journeyAreas.map(ja => ja.id);
+      this.db.prepare(
+        `DELETE FROM journey_fares WHERE from_journey_area_id IN (${placeholders})`
+      ).run(...jaIds);
+      this.db.prepare(
+        `DELETE FROM journey_fares WHERE to_journey_area_id IN (${placeholders})`
+      ).run(...jaIds);
+      this.db.prepare(
+        `DELETE FROM track_points WHERE journey_area_id IN (${placeholders})`
+      ).run(...jaIds);
+    }
+
+    this.db.prepare('DELETE FROM journey_areas WHERE area_id = ?').run(id);
+    this.db.prepare('UPDATE journeys SET start_area_id = NULL WHERE start_area_id = ?').run(id);
+    this.db.prepare('UPDATE journeys SET end_area_id = NULL WHERE end_area_id = ?').run(id);
     this.db.prepare('DELETE FROM area_fare_levels WHERE area_id = ?').run(id);
     this.db.prepare('DELETE FROM area_stops WHERE area_id = ?').run(id);
-    this.db.prepare('DELETE FROM journey_areas WHERE area_id = ?').run(id);
     this.db.prepare('DELETE FROM areas WHERE id = ?').run(id);
   }
 }

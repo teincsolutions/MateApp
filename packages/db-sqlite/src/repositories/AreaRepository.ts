@@ -52,9 +52,35 @@ export class AreaRepository implements IAreaRepository {
 
   async delete(id: string): Promise<void> {
     const db = await getDatabase();
+
+    const journeyAreas = await db.getAllAsync(
+      'SELECT id FROM journey_areas WHERE area_id = ?',
+      [id],
+    ) as { id: string }[];
+
+    const jaIds = journeyAreas.map(ja => ja.id);
+
+    if (jaIds.length > 0) {
+      const placeholders = jaIds.map(() => '?').join(',');
+      await db.runAsync(
+        `DELETE FROM journey_fares WHERE from_journey_area_id IN (${placeholders})`,
+        jaIds,
+      );
+      await db.runAsync(
+        `DELETE FROM journey_fares WHERE to_journey_area_id IN (${placeholders})`,
+        jaIds,
+      );
+      await db.runAsync(
+        `DELETE FROM track_points WHERE journey_area_id IN (${placeholders})`,
+        jaIds,
+      );
+    }
+
+    await db.runAsync('DELETE FROM journey_areas WHERE area_id = ?', [id]);
+    await db.runAsync('UPDATE journeys SET start_area_id = NULL WHERE start_area_id = ?', [id]);
+    await db.runAsync('UPDATE journeys SET end_area_id = NULL WHERE end_area_id = ?', [id]);
     await db.runAsync('DELETE FROM area_fare_levels WHERE area_id = ?', [id]);
     await db.runAsync('DELETE FROM area_stops WHERE area_id = ?', [id]);
-    await db.runAsync('DELETE FROM journey_areas WHERE area_id = ?', [id]);
     await db.runAsync('DELETE FROM areas WHERE id = ?', [id]);
   }
 }

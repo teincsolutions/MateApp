@@ -41,15 +41,14 @@ export default function AreaEditScreen() {
   useFocusEffect(useCallback(() => { refresh(); }, [refresh]));
 
   const handleDeleteArea = () => {
+    let message = `Delete "${name}"?`;
     if (journeyCount > 0) {
-      Alert.alert('Cannot Delete', `This area is linked to ${journeyCount} journey(s). Remove it from all journeys first.`);
-      return;
+      message = `This area is linked to ${journeyCount} journey(s). The area will be removed from all journeys and start/end references will be cleared.\n\n${message}`;
     }
-    if (stops.length > 0) {
-      Alert.alert('Cannot Delete', 'Remove all stops from this area first.');
-      return;
+    if (stops.length > 0 && journeyCount === 0) {
+      message = `This area has ${stops.length} stop(s). They will be unlinked from the area.\n\n${message}`;
     }
-    Alert.alert('Delete Area', `Delete "${name}"? This cannot be undone.`, [
+    Alert.alert('Delete Area', message, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
         await AreaRepository.delete(id!);
