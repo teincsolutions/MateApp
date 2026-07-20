@@ -68,6 +68,8 @@ export function FareLevelPicker({ fareLevels, selectedId, onSelect, onCreateNew 
                 placeholder="Amount (GHS)"
                 keyboardType="decimal-pad"
                 placeholderTextColor="#9CA3AF"
+                autoCorrect={false}
+                autoCapitalize="none"
                 autoFocus
               />
               <TouchableOpacity style={styles.newBtn} onPress={handleCreate} disabled={creating}>

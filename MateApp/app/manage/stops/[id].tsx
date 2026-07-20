@@ -1,6 +1,6 @@
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { StopRepository, AreaStopRepository, AreaRepository } from '../../../adapters/index';
 import { Stop } from '@mateapp/core';
 
@@ -63,16 +63,16 @@ export default function StopEditScreen() {
   if (!stop) return null;
 
   return (
-    <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <Text style={styles.sectionTitle}>Stop Label</Text>
-        <TextInput style={styles.input} value={label} onChangeText={setLabel} placeholder="Stop label" placeholderTextColor="#9CA3AF" />
-
+        <TextInput style={styles.input} value={label} onChangeText={setLabel} placeholder="Stop label" placeholderTextColor="#9CA3AF" autoCorrect={false} autoCapitalize="none" />
+ 
         <Text style={styles.sectionTitle}>GPS Coordinates (fixed)</Text>
         <Text style={styles.readonly}>{stop.latitude.toFixed(6)}, {stop.longitude.toFixed(6)}</Text>
-
+ 
         <Text style={styles.sectionTitle}>Matching Radius (meters)</Text>
-        <TextInput style={styles.input} value={radius} onChangeText={setRadius} placeholder="50" keyboardType="numeric" placeholderTextColor="#9CA3AF" />
+        <TextInput style={styles.input} value={radius} onChangeText={setRadius} placeholder="50" keyboardType="numeric" placeholderTextColor="#9CA3AF" autoCorrect={false} autoCapitalize="none" />
 
         <Text style={styles.sectionTitle}>Linked Areas</Text>
         {linkedAreas.length === 0 ? (
@@ -91,7 +91,7 @@ export default function StopEditScreen() {
           <Text style={styles.deleteBtnText}>Delete Stop</Text>
         </TouchableOpacity>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

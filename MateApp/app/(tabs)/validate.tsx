@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { validateFare } from '../../adapters/index';
@@ -51,7 +51,8 @@ export default function ValidateScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>Validate Fare</Text>
         <Text style={styles.subtitle}>Enter pickup and destination coordinates or use current location.</Text>
 
@@ -66,8 +67,8 @@ export default function ValidateScreen() {
           </TouchableOpacity>
         </View>
         <View style={styles.coordRow}>
-          <TextInput style={styles.coordInput} value={pickupLat} onChangeText={setPickupLat} placeholder="Latitude" placeholderTextColor="#9CA3AF" keyboardType="decimal-pad" />
-          <TextInput style={styles.coordInput} value={pickupLng} onChangeText={setPickupLng} placeholder="Longitude" placeholderTextColor="#9CA3AF" keyboardType="decimal-pad" />
+          <TextInput style={styles.coordInput} value={pickupLat} onChangeText={setPickupLat} placeholder="Latitude" placeholderTextColor="#9CA3AF" keyboardType="decimal-pad" autoCorrect={false} autoCapitalize="none" />
+          <TextInput style={styles.coordInput} value={pickupLng} onChangeText={setPickupLng} placeholder="Longitude" placeholderTextColor="#9CA3AF" keyboardType="decimal-pad" autoCorrect={false} autoCapitalize="none" />
         </View>
 
         <View style={styles.sectionHeader}>
@@ -81,8 +82,8 @@ export default function ValidateScreen() {
           </TouchableOpacity>
         </View>
         <View style={styles.coordRow}>
-          <TextInput style={styles.coordInput} value={destLat} onChangeText={setDestLat} placeholder="Latitude" placeholderTextColor="#9CA3AF" keyboardType="decimal-pad" />
-          <TextInput style={styles.coordInput} value={destLng} onChangeText={setDestLng} placeholder="Longitude" placeholderTextColor="#9CA3AF" keyboardType="decimal-pad" />
+          <TextInput style={styles.coordInput} value={destLat} onChangeText={setDestLat} placeholder="Latitude" placeholderTextColor="#9CA3AF" keyboardType="decimal-pad" autoCorrect={false} autoCapitalize="none" />
+          <TextInput style={styles.coordInput} value={destLng} onChangeText={setDestLng} placeholder="Longitude" placeholderTextColor="#9CA3AF" keyboardType="decimal-pad" autoCorrect={false} autoCapitalize="none" />
         </View>
 
         <TouchableOpacity style={[styles.button, !canValidate && styles.buttonDisabled]} onPress={handleValidate} disabled={!canValidate || loading}>
@@ -145,6 +146,7 @@ export default function ValidateScreen() {
           </View>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

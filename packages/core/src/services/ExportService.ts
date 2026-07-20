@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { Stop } from '../types';
 import {
   IJourneyRepository,
   IAreaRepository,
@@ -77,9 +78,15 @@ export class ExportService {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(lvlRows), 'FareLevels');
 
     // Fare Summary sheet — human-readable unified view
+    const areaStopsMap = new Map<string, Stop[]>();
+    for (const area of areas) {
+      const stops = await this.deps.stopRepo.findByArea(area.id);
+      stops.sort((a, b) => a.seq - b.seq);
+      areaStopsMap.set(area.id, stops);
+    }
     const summaryRows: string[][] = [['Area', 'Stops / Destination', 'Latitude', 'Longitude', 'Fare (GHS)']];
     for (const area of areas) {
-      const areaStops = await this.deps.stopRepo.findByArea(area.id);
+      const areaStops = areaStopsMap.get(area.id) ?? [];
       for (const stop of areaStops) {
         const areaStopLink = await this.deps.areaStopRepo.getByAreaAndStop(area.id, stop.id);
         const fl = areaStopLink?.fare_level_id
@@ -94,7 +101,10 @@ export class ExportService {
         if (fare) {
           const fl = fareLevels.find(l => l.id === fare.fare_level_id);
           const toName = areaNameMap.get(jaTo.area_id) || '';
-          summaryRows.push([area.name, toName, '-', '-', fl ? fl.amount.toFixed(2) : '-']);
+          const destAreaStops = areaStopsMap.get(jaTo.area_id) ?? [];
+          const destLat = destAreaStops.length > 0 ? String(destAreaStops[0].latitude) : '-';
+          const destLng = destAreaStops.length > 0 ? String(destAreaStops[0].longitude) : '-';
+          summaryRows.push([area.name, toName, destLat, destLng, fl ? fl.amount.toFixed(2) : '-']);
         }
       }
     }

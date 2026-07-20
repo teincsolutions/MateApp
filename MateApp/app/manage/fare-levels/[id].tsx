@@ -1,6 +1,6 @@
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { AreaFareLevelRepository } from '../../../adapters/index';
 import { FareLevel } from '@mateapp/core';
 
@@ -60,13 +60,13 @@ export default function FareLevelEditScreen() {
   if (!isNew && !level) return null;
 
   return (
-    <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <Text style={styles.sectionTitle}>Label</Text>
-        <TextInput style={styles.input} value={label} onChangeText={setLabel} placeholder="e.g. Minimum" placeholderTextColor="#9CA3AF" />
-
+        <TextInput style={styles.input} value={label} onChangeText={setLabel} placeholder="e.g. Minimum" placeholderTextColor="#9CA3AF" autoCorrect={false} autoCapitalize="none" />
+ 
         <Text style={styles.sectionTitle}>Amount (GHS)</Text>
-        <TextInput style={styles.input} value={amount} onChangeText={setAmount} placeholder="0.00" keyboardType="decimal-pad" placeholderTextColor="#9CA3AF" />
+        <TextInput style={styles.input} value={amount} onChangeText={setAmount} placeholder="0.00" keyboardType="decimal-pad" placeholderTextColor="#9CA3AF" autoCorrect={false} autoCapitalize="none" />
 
         {!isNew && (
           <Text style={styles.meta}>Updating the amount will immediately affect all stops across all areas that reference this level.</Text>
@@ -82,7 +82,7 @@ export default function FareLevelEditScreen() {
           </TouchableOpacity>
         )}
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

@@ -55,7 +55,9 @@ export default function JourneysScreen() {
   const renderJourney = (journey: Journey) => (
     <View key={journey.id} style={styles.card}>
       <View style={styles.cardInfo}>
-        <Text style={styles.cardName}>{journey.name}</Text>
+        <TouchableOpacity onPress={() => router.push({ pathname: '/manage/journeys/[id]', params: { id: journey.id } })}>
+          <Text style={styles.cardName}>{journey.name}</Text>
+        </TouchableOpacity>
         <Text style={styles.cardDate}>{new Date(journey.created_at).toLocaleDateString()}</Text>
         <View style={[styles.badge, journey.status === 'draft' ? styles.badgeDraft : styles.badgeCompleted]}>
           <Text style={styles.badgeText}>{journey.status === 'draft' ? 'Draft' : 'Completed'}</Text>

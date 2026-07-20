@@ -29,6 +29,8 @@ export default function NewJourneyScreen() {
           onChangeText={setName}
           placeholder="e.g. Kejetia ↔ Suame"
           placeholderTextColor="#9CA3AF"
+          autoCorrect={false}
+          autoCapitalize="none"
           autoFocus
           returnKeyType="done"
           onSubmitEditing={handleStart}

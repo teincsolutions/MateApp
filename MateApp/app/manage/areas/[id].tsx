@@ -1,6 +1,6 @@
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, Modal, FlatList } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, Modal, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
 import { AreaRepository, StopRepository, AreaStopRepository, AreaFareLevelRepository, JourneyRepository, JourneyAreaRepository } from '../../../adapters/index';
 import { Stop, FareLevel } from '@mateapp/core';
 
@@ -16,6 +16,7 @@ export default function AreaEditScreen() {
   const [showAddStop, setShowAddStop] = useState(false);
   const [allStops, setAllStops] = useState<Stop[]>([]);
   const [stopSearch, setStopSearch] = useState('');
+  const [stopAreasMap, setStopAreasMap] = useState<Map<string, string[]>>(new Map());
 
   const refresh = useCallback(async () => {
     if (!id) return;
@@ -74,9 +75,26 @@ export default function AreaEditScreen() {
   };
 
   const handleOpenAddStop = async () => {
-    const existing = await StopRepository.getAll();
+    const [allStops, allAreas] = await Promise.all([
+      StopRepository.getAll(),
+      AreaRepository.getAll(),
+    ]);
     const linkedIds = new Set(stops.map(s => s.id));
-    setAllStops(existing.filter(s => !linkedIds.has(s.id)));
+    const unlinked = allStops.filter(s => !linkedIds.has(s.id));
+    const stopAreasMap = new Map<string, string[]>();
+    for (const area of allAreas) {
+      const areaStops = await AreaStopRepository.getByArea(area.id);
+      for (const as of areaStops) {
+        const existing = stopAreasMap.get(as.stop_id);
+        if (existing) {
+          if (!existing.includes(area.name)) existing.push(area.name);
+        } else {
+          stopAreasMap.set(as.stop_id, [area.name]);
+        }
+      }
+    }
+    setStopAreasMap(stopAreasMap);
+    setAllStops(unlinked);
     setStopSearch('');
     setShowAddStop(true);
   };
@@ -96,7 +114,7 @@ export default function AreaEditScreen() {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.sectionTitle}>Area Name</Text>
-        <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Area name" placeholderTextColor="#9CA3AF" />
+        <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Area name" placeholderTextColor="#9CA3AF" autoCorrect={false} autoCapitalize="none" />
         <TouchableOpacity style={[styles.saveBtn, (!name.trim() || saving) && { opacity: 0.5 }]} onPress={handleSaveName} disabled={!name.trim() || saving}>
           <Text style={styles.saveBtnText}>{saving ? 'Saving...' : 'Update Name'}</Text>
         </TouchableOpacity>
@@ -142,7 +160,7 @@ export default function AreaEditScreen() {
 
       <Modal visible={showAddStop} transparent animationType="slide">
         <TouchableOpacity style={styles.modalBackdrop} onPress={() => setShowAddStop(false)} />
-        <View style={styles.modalSheet}>
+        <KeyboardAvoidingView style={styles.modalSheet} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Add Existing Stop</Text>
             <TouchableOpacity onPress={() => setShowAddStop(false)}>
@@ -155,22 +173,26 @@ export default function AreaEditScreen() {
             onChangeText={setStopSearch}
             placeholder="Search stops..."
             placeholderTextColor="#9CA3AF"
+            autoCorrect={false}
+            autoCapitalize="none"
             autoFocus
           />
           <FlatList
+            keyboardShouldPersistTaps="handled"
             data={filteredAddStops}
             keyExtractor={s => s.id}
             renderItem={({ item }) => (
               <TouchableOpacity style={styles.modalOption} onPress={() => handleAddStop(item)}>
                 <View>
                   <Text style={styles.modalOptionLabel}>{item.label}</Text>
+                  <Text style={styles.modalOptionSub}>{(stopAreasMap.get(item.id) || []).join(', ') || '—'}</Text>
                   <Text style={styles.modalOptionSub}>{item.latitude.toFixed(4)}, {item.longitude.toFixed(4)}</Text>
                 </View>
               </TouchableOpacity>
             )}
             ListEmptyComponent={<Text style={styles.empty}>No matching stops found.</Text>}
           />
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

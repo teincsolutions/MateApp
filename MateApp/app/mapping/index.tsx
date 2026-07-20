@@ -899,6 +899,8 @@ export default function MappingScreen() {
               }}
               placeholder="Area name (e.g. Kejetia)"
               placeholderTextColor="#9CA3AF"
+              autoCorrect={false}
+              autoCapitalize="none"
               autoFocus
             />
             {areaSuggestions.length > 0 && (
@@ -1233,6 +1235,8 @@ export default function MappingScreen() {
                 }}
                 placeholder="e.g. Main Station"
                 placeholderTextColor="#9CA3AF"
+                autoCorrect={false}
+                autoCapitalize="none"
                 autoFocus
                 onSubmitEditing={handleCreateStopFromModal}
               />
