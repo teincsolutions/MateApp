@@ -4,7 +4,31 @@ Kotlin validation library for MateApp's offline SQLite databases. Validates tran
 
 ## Usage
 
-### One-liner validation (recommended)
+### Builder pattern (reusable client)
+
+```kotlin
+val mateApp = MateAppDatabase.Builder()
+    .dbPath("/path/to/exported-journey.db")
+    .build()
+
+// Reuse for multiple validations
+val result1 = mateApp.validate(5.5620, -0.2050, 5.6200, -0.0170)
+val result2 = mateApp.validate(5.55, -0.20, 5.65, -0.01)
+// Database is opened and closed automatically per call
+
+// Switch to a different exported .db without creating a new client
+mateApp.useDatabase("/path/to/another-export.db")
+val result3 = mateApp.validate(6.68, -1.62, 6.68, -1.62)
+
+when (result1.status) {
+    ValidationStatus.SUCCESS -> println("Fare: GHS ${"%.2f".format(result1.fare)}")
+    ValidationStatus.STOP_NOT_FOUND -> println("Stop not found")
+    ValidationStatus.JOURNEY_NOT_FOUND -> println("Journey not found")
+    ValidationStatus.UNKNOWN -> println("Unknown error")
+}
+```
+
+### One-liner static convenience
 
 ```kotlin
 val result = MateAppDatabase.validate(
@@ -14,22 +38,6 @@ val result = MateAppDatabase.validate(
     destLat = 5.6200,
     destLng = -0.0170,
 )
-
-when (result.status) {
-    ValidationStatus.SUCCESS -> println("Fare: GHS ${"%.2f".format(result.fare)}")
-    ValidationStatus.STOP_NOT_FOUND -> println("Stop not found")
-    ValidationStatus.JOURNEY_NOT_FOUND -> println("Journey not found")
-    ValidationStatus.UNKNOWN -> println("Unknown error")
-}
-// Database is automatically opened and closed
-```
-
-### Manual lifecycle
-
-```kotlin
-val db = MateAppDatabase.open(pathToDb)
-val result = ValidationEngine().validate(db, 5.5490, -0.2010, 5.5750, -0.2120)
-MateAppDatabase.close(db)
 ```
 
 ## Build Local AAR
@@ -81,15 +89,27 @@ Replace `YOUR_USERNAME` with your GitHub username.
 
 ## API
 
-### `MateAppDatabase` (convenience wrapper)
+### `MateAppDatabase` (Builder + convenience)
+
+**Instance methods (from `Builder().build()`):**
 
 | Method | Description |
 |--------|-------------|
-| `open(dbPath)` | Opens exported .db in read-only mode |
-| `close(db)` | Closes safely if open |
-| `validate(dbPath, pickupLat, pickupLng, destLat, destLng)` | One-liner: open → validate → close |
-| `getSchemaVersion(dbPath)` | Reads schema version from `_meta` table |
-| `getSourceJourneyId(dbPath)` | Reads `source_journey_id` from `_meta` (present on exported journey .dbs) |
+| `validate(pickupLat, pickupLng, destLat, destLng)` | Validates using the configured dbPath. Opens/closes DB per call. |
+| `useDatabase(dbPath)` | Switch to a different exported .db on the same client |
+| `getDatabasePath()` | Returns the currently configured path |
+| `getSchemaVersion()` | Reads schema version from `_meta` |
+| `getSourceJourneyId()` | Reads journey ID from `_meta` |
+
+**Static methods (one-off):**
+
+| Method | Description |
+|--------|-------------|
+| `validate(dbPath, pickupLat, pickupLng, destLat, destLng)` | One-liner open → validate → close |
+| `openDb(dbPath)` | Opens exported .db in read-only mode |
+| `closeDb(db)` | Closes safely if open |
+| `getSchemaVersion(dbPath)` | Reads schema version from `_meta` |
+| `getSourceJourneyId(dbPath)` | Reads `source_journey_id` from `_meta` |
 
 ### `ValidationEngine.validate(db, pickupLat, pickupLng, destLat, destLng)`
 
