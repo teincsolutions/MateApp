@@ -1,6 +1,6 @@
 import {
   ValidationService, ValidationResult, ValidationDependencies,
-  ExportService as CoreExportService, ExportDependencies
+  ExportService as CoreExportService, ExportDependencies, CsvPart,
 } from '@mateapp/core';
 
 import {
@@ -69,13 +69,21 @@ export async function exportJourneyCsv(journeyId: string): Promise<{ content: st
   return exportService.exportJourneyCsv(journeyId);
 }
 
+export async function exportJourneyCsvParts(journeyId: string): Promise<CsvPart[]> {
+  return exportService.exportJourneyCsvParts(journeyId);
+}
+
 export async function exportMasterCsv(): Promise<{ content: string; fileName: string } | null> {
   return exportService.exportMasterCsv();
 }
 
+export async function exportMasterCsvParts(): Promise<CsvPart[]> {
+  return exportService.masterCsvParts();
+}
+
 const journeyExportService = new JourneyExportService();
 
-export async function exportJourneyDb(journeyId: string): Promise<string> {
+export async function exportJourneyDb(journeyIds: string[]): Promise<string> {
   const db = await getDatabase();
-  return journeyExportService.exportJourneyDb(db, journeyId);
+  return journeyExportService.exportJourneyDb(db, journeyIds);
 }

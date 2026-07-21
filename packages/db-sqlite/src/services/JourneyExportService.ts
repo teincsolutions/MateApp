@@ -58,195 +58,137 @@ const SCHEMA_SQL = `
 export class JourneyExportService {
   async exportJourneyDb(
     sourceDb: SQLiteDatabase,
-    journeyId: string,
+    journeyIds: string[],
   ): Promise<string> {
-    const exportName = `export-${journeyId}.db`;
+    if (journeyIds.length === 0) throw new Error('No journeys selected');
 
-    // Fetch journey data
-    const journey = (await sourceDb.getFirstAsync(
-      'SELECT * FROM journeys WHERE id = ?',
-      [journeyId],
-    )) as Record<string, any> | null;
-    if (!journey) throw new Error(`Journey ${journeyId} not found`);
+    const label = journeyIds.length === 1 ? `export-${journeyIds[0]}.db` : `export-${journeyIds.length}-journeys.db`;
 
-    const journeyAreas = (await sourceDb.getAllAsync(
-      'SELECT * FROM journey_areas WHERE journey_id = ? ORDER BY sequence',
-      [journeyId],
+    // Fetch all journeys
+    const jh = journeyIds.map(() => '?').join(',');
+    const journeys = (await sourceDb.getAllAsync(
+      `SELECT * FROM journeys WHERE id IN (${jh})`,
+      journeyIds,
+    )) as Record<string, any>[];
+    if (journeys.length === 0) throw new Error('No journeys found');
+
+    // Fetch all journey_areas for selected journeys
+    const allJourneyAreas = (await sourceDb.getAllAsync(
+      `SELECT * FROM journey_areas WHERE journey_id IN (${jh}) ORDER BY journey_id, sequence`,
+      journeyIds,
     )) as Record<string, any>[];
 
-    const areaIds = journeyAreas.map((ja) => ja.area_id);
-    if (areaIds.length === 0) throw new Error('Journey has no areas');
+    // Collect unique area IDs
+    const areaIds = [...new Set(allJourneyAreas.map((ja) => ja.area_id))];
 
-    const ph = areaIds.map(() => '?').join(',');
-    const areas = (await sourceDb.getAllAsync(
-      `SELECT * FROM areas WHERE id IN (${ph})`,
-      areaIds,
-    )) as Record<string, any>[];
+    const aph = areaIds.map(() => '?').join(',');
 
-    const stopIdRows = (await sourceDb.getAllAsync(
-      `SELECT DISTINCT stop_id FROM area_stops WHERE area_id IN (${ph})`,
-      areaIds,
-    )) as Record<string, any>[];
-    const stopIds = stopIdRows.map((r) => r.stop_id);
+    // Fetch all referenced data
+    const [areas, fareLevels, areaFareLevels, areaStops, allJourneyFares, allTrackPoints] =
+      await Promise.all([
+        areaIds.length > 0
+          ? sourceDb.getAllAsync(`SELECT * FROM areas WHERE id IN (${aph})`, areaIds) as Promise<Record<string, any>[]>
+          : Promise.resolve([] as Record<string, any>[]),
+        sourceDb.getAllAsync(
+          `SELECT * FROM fare_levels WHERE journey_id IN (${jh})`, journeyIds,
+        ) as Promise<Record<string, any>[]>,
+        areaIds.length > 0
+          ? sourceDb.getAllAsync(`SELECT * FROM area_fare_levels WHERE area_id IN (${aph})`, areaIds) as Promise<Record<string, any>[]>
+          : Promise.resolve([] as Record<string, any>[]),
+        areaIds.length > 0
+          ? sourceDb.getAllAsync(`SELECT * FROM area_stops WHERE area_id IN (${aph})`, areaIds) as Promise<Record<string, any>[]>
+          : Promise.resolve([] as Record<string, any>[]),
+        sourceDb.getAllAsync(
+          `SELECT * FROM journey_fares WHERE journey_id IN (${jh})`, journeyIds,
+        ) as Promise<Record<string, any>[]>,
+        sourceDb.getAllAsync(
+          `SELECT * FROM track_points WHERE journey_id IN (${jh}) ORDER BY sequence`, journeyIds,
+        ) as Promise<Record<string, any>[]>,
+      ]);
 
+    // Collect unique stop IDs
+    const stopIds = [...new Set(areaStops.map((s) => s.stop_id))];
     let stops: Record<string, any>[] = [];
     if (stopIds.length > 0) {
       const sph = stopIds.map(() => '?').join(',');
       stops = (await sourceDb.getAllAsync(
-        `SELECT * FROM stops WHERE id IN (${sph})`,
-        stopIds,
+        `SELECT * FROM stops WHERE id IN (${sph})`, stopIds,
       )) as Record<string, any>[];
     }
 
-    const fareLevels = (await sourceDb.getAllAsync(
-      'SELECT * FROM fare_levels WHERE journey_id = ?',
-      [journeyId],
-    )) as Record<string, any>[];
-
-    const areaFareLevels = (await sourceDb.getAllAsync(
-      `SELECT * FROM area_fare_levels WHERE area_id IN (${ph})`,
-      areaIds,
-    )) as Record<string, any>[];
-
-    const areaStops = (await sourceDb.getAllAsync(
-      `SELECT * FROM area_stops WHERE area_id IN (${ph})`,
-      areaIds,
-    )) as Record<string, any>[];
-
-    const journeyFares = (await sourceDb.getAllAsync(
-      'SELECT * FROM journey_fares WHERE journey_id = ?',
-      [journeyId],
-    )) as Record<string, any>[];
-
-    const trackPoints = (await sourceDb.getAllAsync(
-      'SELECT * FROM track_points WHERE journey_id = ? ORDER BY sequence',
-      [journeyId],
-    )) as Record<string, any>[];
-
     // Build export database
-    const exportDb = await SQLite.openDatabaseAsync(exportName);
+    const exportDb = await SQLite.openDatabaseAsync(label);
     await exportDb.execAsync('PRAGMA foreign_keys = OFF;');
     const stmts = SCHEMA_SQL.split(';').filter((s) => s.trim().length > 0);
     for (const stmt of stmts) {
-      try {
-        await exportDb.execAsync(stmt + ';');
-      } catch {
-        // table may already exist from migration
-      }
+      try { await exportDb.execAsync(stmt + ';'); } catch { /* table may exist */ }
     }
 
+    // Metadata
     await exportDb.runAsync(
-      "INSERT INTO _meta (key, value) VALUES ('source_journey_id', ?)",
-      [journeyId],
+      "INSERT INTO _meta (key, value) VALUES ('source_journey_ids', ?)",
+      [journeyIds.join(',')],
     );
     await exportDb.runAsync(
       "INSERT INTO _meta (key, value) VALUES ('exported_at', ?)",
       [new Date().toISOString()],
     );
 
-    const insertJourney = await exportDb.prepareAsync(
-      'INSERT INTO journeys (id, name, start_area_id, end_area_id, status, created_at, updated_at) VALUES ($id, $name, $startAreaId, $endAreaId, $status, $createdAt, $updatedAt)',
-    );
-    await insertJourney.executeAsync({
-      $id: journey.id,
-      $name: journey.name,
-      $startAreaId: journey.start_area_id,
-      $endAreaId: journey.end_area_id,
-      $status: journey.status,
-      $createdAt: journey.created_at,
-      $updatedAt: journey.updated_at,
-    });
-    await insertJourney.finalizeAsync();
-
-    for (const row of areas) {
-      await exportDb.runAsync(
-        'INSERT INTO areas (id, name, polygon, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-        [row.id, row.name, row.polygon, row.created_at, row.updated_at],
+    // Insert rows (ignore duplicate PK conflicts from shared areas/stops)
+    const insertIgnore = (table: string, cols: string, vals: any[]) => {
+      const ph = vals.map(() => '?').join(',');
+      return exportDb.runAsync(
+        `INSERT OR IGNORE INTO ${table} (${cols}) VALUES (${ph})`, vals,
       );
+    };
+
+    for (const row of journeys) {
+      await insertIgnore('journeys', 'id,name,start_area_id,end_area_id,status,created_at,updated_at', [
+        row.id, row.name, row.start_area_id, row.end_area_id, row.status, row.created_at, row.updated_at,
+      ]);
+    }
+    for (const row of areas) {
+      await insertIgnore('areas', 'id,name,polygon,created_at,updated_at', [
+        row.id, row.name, row.polygon, row.created_at, row.updated_at,
+      ]);
     }
     for (const row of stops) {
-      await exportDb.runAsync(
-        'INSERT INTO stops (id, label, latitude, longitude, radius, seq, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [
-          row.id,
-          row.label,
-          row.latitude,
-          row.longitude,
-          row.radius,
-          row.seq,
-          row.created_at,
-          row.updated_at,
-        ],
-      );
+      await insertIgnore('stops', 'id,label,latitude,longitude,radius,seq,created_at,updated_at', [
+        row.id, row.label, row.latitude, row.longitude, row.radius, row.seq, row.created_at, row.updated_at,
+      ]);
     }
     for (const row of fareLevels) {
-      await exportDb.runAsync(
-        'INSERT INTO fare_levels (id, journey_id, label, order_no, amount) VALUES (?, ?, ?, ?, ?)',
-        [row.id, row.journey_id, row.label, row.order_no, row.amount],
-      );
+      await insertIgnore('fare_levels', 'id,journey_id,label,order_no,amount', [
+        row.id, row.journey_id, row.label, row.order_no, row.amount,
+      ]);
     }
     for (const row of areaFareLevels) {
-      await exportDb.runAsync(
-        'INSERT INTO area_fare_levels (id, area_id, fare_level_id) VALUES (?, ?, ?)',
-        [row.id, row.area_id, row.fare_level_id],
-      );
+      await insertIgnore('area_fare_levels', 'id,area_id,fare_level_id', [
+        row.id, row.area_id, row.fare_level_id,
+      ]);
     }
     for (const row of areaStops) {
-      await exportDb.runAsync(
-        'INSERT INTO area_stops (id, area_id, stop_id, fare_level_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-        [
-          row.id,
-          row.area_id,
-          row.stop_id,
-          row.fare_level_id,
-          row.created_at,
-          row.updated_at,
-        ],
-      );
+      await insertIgnore('area_stops', 'id,area_id,stop_id,fare_level_id,created_at,updated_at', [
+        row.id, row.area_id, row.stop_id, row.fare_level_id, row.created_at, row.updated_at,
+      ]);
     }
-    for (const row of journeyAreas) {
-      await exportDb.runAsync(
-        'INSERT INTO journey_areas (id, journey_id, area_id, sequence, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-        [
-          row.id,
-          row.journey_id,
-          row.area_id,
-          row.sequence,
-          row.created_at,
-          row.updated_at,
-        ],
-      );
+    for (const row of allJourneyAreas) {
+      await insertIgnore('journey_areas', 'id,journey_id,area_id,sequence,created_at,updated_at', [
+        row.id, row.journey_id, row.area_id, row.sequence, row.created_at, row.updated_at,
+      ]);
     }
-    for (const row of journeyFares) {
-      await exportDb.runAsync(
-        'INSERT INTO journey_fares (id, journey_id, from_journey_area_id, to_journey_area_id, fare_level_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [
-          row.id,
-          row.journey_id,
-          row.from_journey_area_id,
-          row.to_journey_area_id,
-          row.fare_level_id,
-          row.created_at,
-          row.updated_at,
-        ],
-      );
+    for (const row of allJourneyFares) {
+      await insertIgnore('journey_fares', 'id,journey_id,from_journey_area_id,to_journey_area_id,fare_level_id,created_at,updated_at', [
+        row.id, row.journey_id, row.from_journey_area_id, row.to_journey_area_id, row.fare_level_id, row.created_at, row.updated_at,
+      ]);
     }
-    for (const row of trackPoints) {
-      await exportDb.runAsync(
-        'INSERT INTO track_points (id, journey_id, journey_area_id, sequence, latitude, longitude, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [
-          row.id,
-          row.journey_id,
-          row.journey_area_id,
-          row.sequence,
-          row.latitude,
-          row.longitude,
-          row.created_at,
-        ],
-      );
+    for (const row of allTrackPoints) {
+      await insertIgnore('track_points', 'id,journey_id,journey_area_id,sequence,latitude,longitude,created_at', [
+        row.id, row.journey_id, row.journey_area_id, row.sequence, row.latitude, row.longitude, row.created_at,
+      ]);
     }
 
     await exportDb.closeAsync();
-    return exportName;
+    return label;
   }
 }

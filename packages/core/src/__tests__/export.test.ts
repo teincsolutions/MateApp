@@ -75,9 +75,9 @@ describe('ExportService', () => {
       expect(sheetNames).toContain('JourneyAreas');
       expect(sheetNames).toContain('Areas');
       expect(sheetNames).toContain('Stops');
-      expect(sheetNames).toContain('Fares');
-      expect(sheetNames).toContain('FareLevels');
-      expect(sheetNames).toContain('TrackPoints');
+      expect(sheetNames).toContain('Journey Fares');
+      expect(sheetNames).toContain('Fare Levels');
+      expect(sheetNames).toContain('Track Points');
     });
 
     it('has correct row counts in sheets', async () => {
@@ -94,7 +94,7 @@ describe('ExportService', () => {
       const jaData = XLSX.utils.sheet_to_json(journeyAreasSheet, { header: 1 }) as unknown[][];
       expect(jaData.length).toBe(4);
 
-      const trackPointsSheet = wb.Sheets['TrackPoints'];
+      const trackPointsSheet = wb.Sheets['Track Points'];
       const tpData = XLSX.utils.sheet_to_json(trackPointsSheet, { header: 1 }) as unknown[][];
       expect(tpData.length).toBe(12);
     });
@@ -122,7 +122,7 @@ describe('ExportService', () => {
       expect(sheetNames).toContain('Journeys');
       expect(sheetNames).toContain('Areas');
       expect(sheetNames).toContain('Stops');
-      expect(sheetNames).toContain('ValidationLogs');
+      expect(sheetNames).toContain('Validation Logs');
     });
 
     it('includes all journeys', async () => {
@@ -152,7 +152,7 @@ describe('ExportService', () => {
       expect(result).not.toBeNull();
 
       const wb = writeAndReadXlsx(result!.base64);
-      const logsSheet = wb.Sheets['ValidationLogs'];
+      const logsSheet = wb.Sheets['Validation Logs'];
       const logsData = XLSX.utils.sheet_to_json(logsSheet, { header: 1 });
       expect(logsData.length).toBeGreaterThanOrEqual(1);
     });

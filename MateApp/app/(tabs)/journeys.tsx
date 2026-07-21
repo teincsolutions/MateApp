@@ -40,7 +40,7 @@ export default function JourneysScreen() {
   const handleExport = async (journey: Journey) => {
     setExporting(journey.id);
     try {
-      await exportJourneyToFile(journey.id);
+      await exportJourneyToFile([journey.id]);
     } catch {
       Alert.alert('Error', 'Export failed.');
     }

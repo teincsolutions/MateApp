@@ -102,7 +102,7 @@ export default function JourneyEditScreen() {
 
   const handleExport = async () => {
     try {
-      const dbName = await exportJourneyDb(id!);
+      const dbName = await exportJourneyDb([id!]);
       const src = FileSystem.documentDirectory + "SQLite/" + dbName;
       const dest = FileSystem.cacheDirectory + dbName;
       await FileSystem.copyAsync({ from: src, to: dest });

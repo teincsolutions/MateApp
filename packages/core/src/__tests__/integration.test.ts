@@ -149,7 +149,7 @@ describe('Integration: End-to-End Workflow', () => {
 
     const wb1 = writeAndReadXlsx(journeyExport!.base64);
     expect(wb1.SheetNames).toContain('Journey');
-    expect(wb1.SheetNames).toContain('TrackPoints');
+    expect(wb1.SheetNames).toContain('Track Points');
 
     // Step 8: Complete journey
     await journeyRepo.updateStatus(journey.id, 'completed', area2.id);
@@ -201,7 +201,7 @@ describe('Integration: End-to-End Workflow', () => {
     expect(wb2.SheetNames).toContain('Journeys');
     expect(wb2.SheetNames).toContain('Areas');
     expect(wb2.SheetNames).toContain('Stops');
-    expect(wb2.SheetNames).toContain('ValidationLogs');
+    expect(wb2.SheetNames).toContain('Validation Logs');
 
     // Verify validation logs were created
     const logs = await validationLogRepo.getAll();
