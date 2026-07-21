@@ -26,6 +26,7 @@ export default function AreaEditScreen() {
     const s = await StopRepository.findByArea(area.id);
     setStops(s);
     const fl = await AreaFareLevelRepository.getByArea(area.id);
+    fl.sort((a, b) => a.amount - b.amount);
     setFareLevels(fl);
     const journeys = await JourneyRepository.getAll();
     let linkedCount = 0;

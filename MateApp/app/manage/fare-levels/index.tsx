@@ -13,6 +13,7 @@ export default function FareLevelsIndexScreen() {
 
   const loadLevels = async (j: Journey) => {
     const fl = await AreaFareLevelRepository.getByJourney(j.id);
+    fl.sort((a, b) => a.amount - b.amount);
     setLevels(fl);
   };
 

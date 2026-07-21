@@ -183,8 +183,10 @@ export default function MappingScreen() {
     const maxSeq = tps.length > 0 ? Math.max(...tps.map((t) => t.sequence)) : 0;
     setTrackSequence(maxSeq);
     setTrackPoints(tps);
-    setIsTracking(true);
-    setIsRecording(true);
+    if (j.status === 'draft') {
+      setIsTracking(true);
+      setIsRecording(true);
+    }
     setInitialLoadDone(true);
   }, [journeyId]);
 
@@ -216,18 +218,17 @@ export default function MappingScreen() {
     setNewAreaName("");
     setSelectedAreaFareLevelId(null);
     setSuggestedArea(null);
-    reverseGeocode(
-      currentLocation.latitude,
-      currentLocation.longitude,
-    ).then((street) => {
-      if (street) setNewAreaName(street);
-    });
+    reverseGeocode(currentLocation.latitude, currentLocation.longitude).then(
+      (street) => {
+        if (street) setNewAreaName(street);
+      },
+    );
     const timer = setTimeout(() => setShowNewAreaModal(true), 500);
     return () => clearTimeout(timer);
   }, [initialLoadDone, journey?.id, journeyAreas.length, currentLocation]);
 
   useEffect(() => {
-    if (!journey) return;
+    if (!journey || journey.status !== 'draft') return;
     (async () => {
       const granted = await Location.requestForegroundPermissionsAsync();
       if (!granted) {
@@ -398,7 +399,8 @@ export default function MappingScreen() {
 
   const createStop = async (label: string, fareLevelId: string | null) => {
     if (!currentLocation || !activeJourneyArea) return;
-    const nextSeq = stops.length > 0 ? Math.max(...stops.map((s) => s.seq)) + 1 : 0;
+    const nextSeq =
+      stops.length > 0 ? Math.max(...stops.map((s) => s.seq)) + 1 : 0;
     const stop = await StopRepository.create(
       label,
       currentLocation.latitude,
@@ -521,7 +523,8 @@ export default function MappingScreen() {
     if (existingStops.length > 0) {
       stop = existingStops[0];
     } else {
-      const nextSeq = stops.length > 0 ? Math.max(...stops.map((s) => s.seq)) + 1 : 0;
+      const nextSeq =
+        stops.length > 0 ? Math.max(...stops.map((s) => s.seq)) + 1 : 0;
       stop = await StopRepository.create(
         suggestedArea ? `${area.name} Stop` : `${name || area.name} Stop`,
         currentLocation.latitude,
@@ -613,7 +616,8 @@ export default function MappingScreen() {
       50,
     );
     if (existingStops.length === 0) {
-      const nextSeq = stops.length > 0 ? Math.max(...stops.map((s) => s.seq)) + 1 : 0;
+      const nextSeq =
+        stops.length > 0 ? Math.max(...stops.map((s) => s.seq)) + 1 : 0;
       const stop = await StopRepository.create(
         `${suggestedArea.name} Stop`,
         currentLocation.latitude,
@@ -846,7 +850,8 @@ export default function MappingScreen() {
             </Text>
             {suggestedAreaJourneys.length > 0 && (
               <Text style={styles.modalText}>
-                Used in journeys: {suggestedAreaJourneys.map((j) => j.name).join(", ")}
+                Used in journeys:{" "}
+                {suggestedAreaJourneys.map((j) => j.name).join(", ")}
               </Text>
             )}
             <TouchableOpacity
@@ -916,16 +921,10 @@ export default function MappingScreen() {
                       setAreaSuggestions([]);
                     }}
                   >
-                    <Text
-                      style={styles.suggestionPrimary}
-                      numberOfLines={1}
-                    >
+                    <Text style={styles.suggestionPrimary} numberOfLines={1}>
                       {s.primaryText}
                     </Text>
-                    <Text
-                      style={styles.suggestionSecondary}
-                      numberOfLines={1}
-                    >
+                    <Text style={styles.suggestionSecondary} numberOfLines={1}>
                       {s.secondaryText}
                     </Text>
                   </TouchableOpacity>
@@ -1253,10 +1252,7 @@ export default function MappingScreen() {
                         setStopSuggestions([]);
                       }}
                     >
-                      <Text
-                        style={styles.suggestionPrimary}
-                        numberOfLines={1}
-                      >
+                      <Text style={styles.suggestionPrimary} numberOfLines={1}>
                         {s.primaryText}
                       </Text>
                       <Text

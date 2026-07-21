@@ -46,7 +46,7 @@ export function FareLevelPicker({ fareLevels, selectedId, onSelect, onCreateNew 
           </TouchableOpacity>
 
           <ScrollView style={styles.listScroll} bounces={false} keyboardShouldPersistTaps="handled">
-            {fareLevels.map((item) => (
+            {[...fareLevels].sort((a, b) => a.amount - b.amount).map((item) => (
               <TouchableOpacity
                 key={item.id}
                 style={styles.option}

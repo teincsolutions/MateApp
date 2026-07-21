@@ -18,6 +18,7 @@ export default function FareLevelEditScreen() {
     (async () => {
       if (journeyId) {
         const fls = await AreaFareLevelRepository.getByJourney(journeyId);
+        fls.sort((a, b) => a.amount - b.amount);
         const found = fls.find(f => f.id === id);
         if (found) { setLevel(found); setLabel(found.label); setAmount(String(found.amount)); }
       }
