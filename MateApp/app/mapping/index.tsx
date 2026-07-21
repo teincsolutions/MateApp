@@ -206,6 +206,23 @@ export default function MappingScreen() {
     }, [loadJourney]),
   );
 
+  // Fit map to show all stops and track points when loading completed journeys
+  useEffect(() => {
+    if (!initialLoadDone || !journey) return;
+    const coords: { latitude: number; longitude: number }[] = [
+      ...stops.map(s => ({ latitude: s.latitude, longitude: s.longitude })),
+      ...trackPoints.map(tp => ({ latitude: tp.latitude, longitude: tp.longitude })),
+    ];
+    if (coords.length > 0) {
+      setTimeout(() => {
+        mapRef.current?.fitToCoordinates(coords, {
+          edgePadding: { top: 80, right: 80, bottom: 200, left: 80 },
+          animated: true,
+        });
+      }, 300);
+    }
+  }, [initialLoadDone, stops.length, trackPoints.length]);
+
   // Gap #1: Auto-create first area when mapping starts with no areas
   useEffect(() => {
     if (
