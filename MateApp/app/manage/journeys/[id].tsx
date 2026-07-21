@@ -11,11 +11,14 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
 import {
   JourneyRepository,
   AreaRepository,
   StopRepository,
   JourneyAreaRepository,
+  exportJourneyDb,
 } from "../../../adapters/index";
 
 export default function JourneyEditScreen() {
@@ -97,6 +100,25 @@ export default function JourneyEditScreen() {
     );
   };
 
+  const handleExport = async () => {
+    try {
+      const dbName = await exportJourneyDb(id!);
+      const src = FileSystem.documentDirectory + "SQLite/" + dbName;
+      const dest = FileSystem.cacheDirectory + dbName;
+      await FileSystem.copyAsync({ from: src, to: dest });
+      if (!(await Sharing.isAvailableAsync())) {
+        Alert.alert("Sharing Unavailable", "Sharing is not available on this device.");
+        return;
+      }
+      await Sharing.shareAsync(dest, {
+        mimeType: "application/octet-stream",
+        dialogTitle: `Export ${name}`,
+      });
+    } catch (err) {
+      Alert.alert("Export Failed", err instanceof Error ? err.message : "Unknown error");
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -154,6 +176,10 @@ export default function JourneyEditScreen() {
             <Text style={styles.completeBtnText}>Complete Journey</Text>
           </TouchableOpacity>
         )}
+
+        <TouchableOpacity style={styles.exportBtn} onPress={handleExport}>
+          <Text style={styles.exportBtnText}>Export Journey (.db)</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
           <Text style={styles.deleteBtnText}>Delete Journey</Text>
@@ -215,6 +241,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   completeBtnText: { color: "#065F46", fontSize: 15, fontWeight: "600" },
+  exportBtn: {
+    backgroundColor: "#DBEAFE",
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  exportBtnText: { color: "#1D4ED8", fontSize: 15, fontWeight: "600" },
   deleteBtn: {
     backgroundColor: "#FEE2E2",
     paddingVertical: 14,

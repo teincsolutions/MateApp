@@ -4,16 +4,15 @@ Kotlin validation library for MateApp's offline SQLite databases. Validates tran
 
 ## Usage
 
-```kotlin
-// Open the mateapp.db exported from MateApp
-val db = SQLiteDatabase.openDatabase(pathToDb, null, 0)
+### One-liner validation (recommended)
 
-val result = ValidationEngine().validate(
-    db = db,
-    pickupLat = 5.5490,
-    pickupLng = -0.2010,
-    destLat = 5.5750,
-    destLng = -0.2120,
+```kotlin
+val result = MateAppDatabase.validate(
+    dbPath = "/path/to/exported-journey.db",
+    pickupLat = 5.5620,
+    pickupLng = -0.2050,
+    destLat = 5.6200,
+    destLng = -0.0170,
 )
 
 when (result.status) {
@@ -22,8 +21,15 @@ when (result.status) {
     ValidationStatus.JOURNEY_NOT_FOUND -> println("Journey not found")
     ValidationStatus.UNKNOWN -> println("Unknown error")
 }
+// Database is automatically opened and closed
+```
 
-db.close()
+### Manual lifecycle
+
+```kotlin
+val db = MateAppDatabase.open(pathToDb)
+val result = ValidationEngine().validate(db, 5.5490, -0.2010, 5.5750, -0.2120)
+MateAppDatabase.close(db)
 ```
 
 ## Build Local AAR
@@ -74,6 +80,16 @@ dependencies {
 Replace `YOUR_USERNAME` with your GitHub username.
 
 ## API
+
+### `MateAppDatabase` (convenience wrapper)
+
+| Method | Description |
+|--------|-------------|
+| `open(dbPath)` | Opens exported .db in read-only mode |
+| `close(db)` | Closes safely if open |
+| `validate(dbPath, pickupLat, pickupLng, destLat, destLng)` | One-liner: open → validate → close |
+| `getSchemaVersion(dbPath)` | Reads schema version from `_meta` table |
+| `getSourceJourneyId(dbPath)` | Reads `source_journey_id` from `_meta` (present on exported journey .dbs) |
 
 ### `ValidationEngine.validate(db, pickupLat, pickupLng, destLat, destLng)`
 

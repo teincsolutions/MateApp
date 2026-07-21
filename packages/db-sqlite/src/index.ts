@@ -8,3 +8,4 @@ export { JourneyAreaRepository } from './repositories/JourneyAreaRepository';
 export { JourneyFareRepository } from './repositories/JourneyFareRepository';
 export { TrackPointRepository } from './repositories/TrackPointRepository';
 export { ValidationLogRepository } from './repositories/ValidationLogRepository';
+export { JourneyExportService } from './services/JourneyExportService';

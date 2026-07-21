@@ -13,6 +13,8 @@ import {
   JourneyFareRepository,
   TrackPointRepository,
   ValidationLogRepository,
+  JourneyExportService,
+  getDatabase,
 } from '@mateapp/db-sqlite';
 
 const journeyRepo = new JourneyRepository();
@@ -69,4 +71,11 @@ export async function exportJourneyCsv(journeyId: string): Promise<{ content: st
 
 export async function exportMasterCsv(): Promise<{ content: string; fileName: string } | null> {
   return exportService.exportMasterCsv();
+}
+
+const journeyExportService = new JourneyExportService();
+
+export async function exportJourneyDb(journeyId: string): Promise<string> {
+  const db = await getDatabase();
+  return journeyExportService.exportJourneyDb(db, journeyId);
 }
