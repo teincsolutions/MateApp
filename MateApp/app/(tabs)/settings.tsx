@@ -1,9 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { useRouter } from 'expo-router';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSettingsStore } from '@mateapp/core';
 import { loadSettings, saveSettings } from '../../adapters/settings';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -26,6 +28,26 @@ export default function SettingsScreen() {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
   }, [gpsInterval, minDistance]);
+
+  async function handleExportDb() {
+    try {
+      const src = FileSystem.documentDirectory + 'SQLite/mateapp.db';
+      const info = await FileSystem.getInfoAsync(src);
+      if (!info.exists) {
+        Alert.alert('No Database', 'No mateapp.db found to export.');
+        return;
+      }
+      const dest = FileSystem.cacheDirectory + 'mateapp.db';
+      await FileSystem.copyAsync({ from: src, to: dest });
+      if (!(await Sharing.isAvailableAsync())) {
+        Alert.alert('Sharing Unavailable', 'Sharing is not available on this device.');
+        return;
+      }
+      await Sharing.shareAsync(dest, { mimeType: 'application/octet-stream', dialogTitle: 'Share mateapp.db' });
+    } catch (err) {
+      Alert.alert('Export Failed', err instanceof Error ? err.message : 'Unknown error');
+    }
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -96,6 +118,13 @@ export default function SettingsScreen() {
             <View style={styles.menuItemContent}>
               <Text style={styles.menuItemTitle}>Manage Data</Text>
               <Text style={styles.menuItemDesc}>Edit stops, areas, and fare levels</Text>
+            </View>
+            <Text style={styles.menuArrow}>›</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.menuItem, { borderBottomWidth: 0 }]} onPress={handleExportDb}>
+            <View style={styles.menuItemContent}>
+              <Text style={styles.menuItemTitle}>Export Database</Text>
+              <Text style={styles.menuItemDesc}>Share .db file for Android validation</Text>
             </View>
             <Text style={styles.menuArrow}>›</Text>
           </TouchableOpacity>
