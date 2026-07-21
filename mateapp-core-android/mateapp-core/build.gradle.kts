@@ -21,6 +21,10 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 publishing {
@@ -39,4 +43,7 @@ publishing {
 
 dependencies {
     implementation("org.jetbrains.kotlin:kotlin-stdlib:1.9.22")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.12")
 }

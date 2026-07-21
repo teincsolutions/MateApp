@@ -32,25 +32,22 @@ class ValidationEngine {
         result.destAreaName = destArea?.name
 
         if (pickupStop.first == null && destStop.first == null) {
-            return result.copy(
-                status = ValidationStatus.STOP_NOT_FOUND,
-                message = "No stops found near pickup or destination",
-            )
+            result.status = ValidationStatus.STOP_NOT_FOUND
+            result.message = "No stops found near pickup or destination"
+            return result
         }
 
         if (pickupArea == null || destArea == null) {
-            return result.copy(
-                status = ValidationStatus.STOP_NOT_FOUND,
-                message = "Could not determine pickup or destination area",
-            )
+            result.status = ValidationStatus.STOP_NOT_FOUND
+            result.message = "Could not determine pickup or destination area"
+            return result
         }
 
         val journey = findJourney(db, pickupArea.id, destArea.id)
         if (journey == null) {
-            return result.copy(
-                status = ValidationStatus.JOURNEY_NOT_FOUND,
-                message = "Journey not found",
-            )
+            result.status = ValidationStatus.JOURNEY_NOT_FOUND
+            result.message = "Journey not found"
+            return result
         }
         result.journeyName = journey.name
 
@@ -203,21 +200,4 @@ class ValidationEngine {
         val matched = areaLevels.find { it.id == bestFlId }
         return matched?.amount
     }
-
-    private fun ValidationResult.copy(
-        status: ValidationStatus = this.status,
-        message: String = this.message,
-    ): ValidationResult = ValidationResult(
-        journeyName = this.journeyName,
-        pickupAreaName = this.pickupAreaName,
-        pickupStopLabel = this.pickupStopLabel,
-        destAreaName = this.destAreaName,
-        destStopLabel = this.destStopLabel,
-        fare = this.fare,
-        fareType = this.fareType,
-        estimatedPickup = this.estimatedPickup,
-        estimatedDest = this.estimatedDest,
-        status = status,
-        message = message,
-    )
 }

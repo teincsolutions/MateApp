@@ -77,25 +77,17 @@ object GeometryUtils {
     fun polygonFromJson(json: String?): List<LatLng> {
         if (json == null) return emptyList()
         return try {
-            val trimmed = json.trim()
-            if (trimmed.startsWith("[")) {
-                val raw = trimmed
-                    .removeSurrounding("[", "]")
-                    .split("},{")
-                    .map { it.removeSurrounding("{", "}") }
-                raw.map { entry ->
-                    val parts = entry.split(",").associate {
-                        val kv = it.split(":")
-                        kv[0].trim().removeSurrounding("\"") to kv[1].trim()
-                    }
+            val objRegex = Regex("""\{[^}]*\}""")
+            val kvRegex = Regex(""""latitude"\s*:\s*([^,}\s]+)\s*[,}]\s*"longitude"\s*:\s*([^,}\s]+)""")
+            objRegex.findAll(json.trim()).map { match ->
+                val kv = kvRegex.find(match.value)
+                if (kv != null) {
                     LatLng(
-                        latitude = parts["latitude"]?.toDoubleOrNull() ?: 0.0,
-                        longitude = parts["longitude"]?.toDoubleOrNull() ?: 0.0,
+                        latitude = kv.groupValues[1].toDouble(),
+                        longitude = kv.groupValues[2].toDouble(),
                     )
-                }
-            } else {
-                emptyList()
-            }
+                } else null
+            }.filterNotNull().toList()
         } catch (_: Exception) {
             emptyList()
         }

@@ -1,17 +1,17 @@
 package com.mateapp.validation
 
 data class ValidationResult(
-    val journeyName: String? = null,
-    val pickupAreaName: String? = null,
-    val pickupStopLabel: String? = null,
-    val destAreaName: String? = null,
-    val destStopLabel: String? = null,
-    val fare: Double? = null,
-    val fareType: String? = null,
-    val estimatedPickup: Boolean = false,
-    val estimatedDest: Boolean = false,
-    val status: ValidationStatus = ValidationStatus.UNKNOWN,
-    val message: String = "",
+    var journeyName: String? = null,
+    var pickupAreaName: String? = null,
+    var pickupStopLabel: String? = null,
+    var destAreaName: String? = null,
+    var destStopLabel: String? = null,
+    var fare: Double? = null,
+    var fareType: String? = null,
+    var estimatedPickup: Boolean = false,
+    var estimatedDest: Boolean = false,
+    var status: ValidationStatus = ValidationStatus.UNKNOWN,
+    var message: String = "",
 )
 
 enum class ValidationStatus {
