@@ -6,27 +6,35 @@ Android/Kotlin library for offline fare validation against MateApp SQLite databa
 
 ### JitPack
 
-```gradle
-// settings.gradle.kts or root build.gradle.kts
-repositories {
-    maven { url = uri("https://jitpack.io") }
+```kotlin
+// settings.gradle.kts
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        mavenCentral()
+        maven { url = uri("https://jitpack.io") }
+    }
 }
 
 // app/build.gradle.kts
 dependencies {
-    implementation("com.github.teincsolutions:mateapp-core-android:v1.1.0")
+    implementation("com.github.teincsolutions:MateApp:v1.2.0")
 }
 ```
 
 ```groovy
 // settings.gradle
-repositories {
-    maven { url "https://jitpack.io" }
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        mavenCentral()
+        maven { url "https://jitpack.io" }
+    }
 }
 
 // app/build.gradle
 dependencies {
-    implementation 'com.github.teincsolutions:mateapp-core-android:v1.1.0'
+    implementation 'com.github.teincsolutions:MateApp:v1.2.0'
 }
 ```
 
@@ -78,7 +86,6 @@ if (result.getStatus() == ValidationStatus.SUCCESS) {
 ```java
 // imports same as above
 
-MateAppDatabase mateApp = new MateAppDatabase.Builder()
 MateAppDatabase mateApp = new MateAppDatabase.Builder()
     .dbPath("/path/to/exported-journey.db")
     .build();
