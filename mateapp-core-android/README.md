@@ -1,34 +1,142 @@
 # mateapp-core-android
 
-Kotlin validation library for MateApp's offline SQLite databases. Validates transport fares given pickup/destination coordinates.
+Android/Kotlin library for offline fare validation against MateApp SQLite databases. Accepts pickup/destination coordinates and returns validated fare, route, and area information.
 
-## Usage
+## Install
 
-### Builder pattern (reusable client)
+### JitPack
 
-```kotlin
-val mateApp = MateAppDatabase.Builder()
-    .dbPath("/path/to/exported-journey.db")
-    .build()
+```gradle
+// settings.gradle.kts or root build.gradle.kts
+repositories {
+    maven { url = uri("https://jitpack.io") }
+}
 
-// Reuse for multiple validations
-val result1 = mateApp.validate(5.5620, -0.2050, 5.6200, -0.0170)
-val result2 = mateApp.validate(5.55, -0.20, 5.65, -0.01)
-// Database is opened and closed automatically per call
-
-// Switch to a different exported .db without creating a new client
-mateApp.useDatabase("/path/to/another-export.db")
-val result3 = mateApp.validate(6.68, -1.62, 6.68, -1.62)
-
-when (result1.status) {
-    ValidationStatus.SUCCESS -> println("Fare: GHS ${"%.2f".format(result1.fare)}")
-    ValidationStatus.STOP_NOT_FOUND -> println("Stop not found")
-    ValidationStatus.JOURNEY_NOT_FOUND -> println("Journey not found")
-    ValidationStatus.UNKNOWN -> println("Unknown error")
+// app/build.gradle.kts
+dependencies {
+    implementation("com.github.teincsolutions:MateApp:v1.0.0")
 }
 ```
 
-### One-liner static convenience
+```groovy
+// settings.gradle
+repositories {
+    maven { url "https://jitpack.io" }
+}
+
+// app/build.gradle
+dependencies {
+    implementation 'com.github.teincsolutions:MateApp:v1.0.0'
+}
+```
+
+### Local AAR
+
+```bash
+./gradlew :mateapp-core:assembleRelease
+# AAR at: mateapp-core/build/outputs/aar/mateapp-core-release.aar
+```
+
+```gradle
+// app/build.gradle.kts
+dependencies {
+    implementation(files("libs/mateapp-core-release.aar"))
+}
+```
+
+## Usage (Java)
+
+```java
+import com.mateapp.validation.MateAppDatabase;
+import com.mateapp.validation.ValidationResult;
+import com.mateapp.validation.ValidationStatus;
+```
+
+### One-off validation
+
+```java
+ValidationResult result = MateAppDatabase.validate(
+    "/path/to/exported-journey.db",
+    5.5620,   // pickupLat
+    -0.2050,  // pickupLng
+    5.6200,   // destLat
+    -0.0170   // destLng
+);
+
+if (result.getStatus() == ValidationStatus.SUCCESS) {
+    System.out.println("Fare: GHS " + String.format("%.2f", result.getFare()));
+    System.out.println("Journey: " + result.getJourneyName());
+    System.out.println("Pickup: " + result.getPickupAreaName() + " → " + result.getPickupStopLabel());
+    System.out.println("Destination: " + result.getDestAreaName() + " → " + result.getDestStopLabel());
+} else {
+    System.out.println("Validation failed: " + result.getMessage());
+}
+```
+
+### Builder pattern (reusable client)
+
+```java
+// imports same as above
+
+MateAppDatabase mateApp = new MateAppDatabase.Builder()
+MateAppDatabase mateApp = new MateAppDatabase.Builder()
+    .dbPath("/path/to/exported-journey.db")
+    .build();
+
+// Reuse for multiple lookups — DB opens/closes per call
+ValidationResult r1 = mateApp.validate(5.5620, -0.2050, 5.6200, -0.0170);
+ValidationResult r2 = mateApp.validate(5.55, -0.20, 5.65, -0.01);
+
+// Switch DB without creating a new client
+mateApp.useDatabase("/path/to/another-export.db");
+ValidationResult r3 = mateApp.validate(6.68, -1.62, 6.68, -1.62);
+```
+
+### Inspect metadata
+
+```java
+MateAppDatabase db = new MateAppDatabase.Builder()
+    .dbPath("/path/to/export.db")
+    .build();
+
+int schemaVersion = db.getSchemaVersion();               // e.g. 5
+String journeyIds = db.getSourceJourneyIds();             // e.g. "uuid-1,uuid-2"
+String journeyId = db.getSourceJourneyId();               // single
+
+// Static convenience
+int version = MateAppDatabase.getSchemaVersion("/path/to/export.db");
+String id = MateAppDatabase.getSourceJourneyId("/path/to/export.db");
+String ids = MateAppDatabase.getSourceJourneyIds("/path/to/export.db");
+```
+
+### ValidationResult fields
+
+```java
+result.getStatus()          // ValidationStatus enum
+result.getFare()            // Double? — null if not configured
+result.getFareType()        // String? — "intra-area" or "journey" or null
+result.getJourneyName()     // String?
+result.getPickupAreaName()  // String?
+result.getPickupStopLabel() // String?
+result.getDestAreaName()    // String?
+result.getDestStopLabel()   // String?
+result.getEstimatedPickup() // boolean — true if nearest stop >50m
+result.getEstimatedDest()   // boolean
+result.getMessage()         // String — human-readable summary
+```
+
+### ValidationStatus enum
+
+```java
+ValidationStatus.SUCCESS             // Fare found
+ValidationStatus.STOP_NOT_FOUND      // No stop within 25km
+ValidationStatus.JOURNEY_NOT_FOUND   // No journey linking both areas
+ValidationStatus.UNKNOWN             // Unexpected error
+```
+
+## Usage (Kotlin)
+
+### One-off
 
 ```kotlin
 val result = MateAppDatabase.validate(
@@ -38,121 +146,136 @@ val result = MateAppDatabase.validate(
     destLat = 5.6200,
     destLng = -0.0170,
 )
+
+when (result.status) {
+    ValidationStatus.SUCCESS -> println("Fare: GHS ${"%.2f".format(result.fare)}")
+    ValidationStatus.STOP_NOT_FOUND -> println("Stop not found")
+    ValidationStatus.JOURNEY_NOT_FOUND -> println("Journey not found")
+    ValidationStatus.UNKNOWN -> println("Unknown error")
+}
 ```
 
-## Build Local AAR
+### Builder
+
+```kotlin
+val mateApp = MateAppDatabase.Builder()
+    .dbPath("/path/to/exported-journey.db")
+    .build()
+
+val result = mateApp.validate(5.5620, -0.2050, 5.6200, -0.0170)
+
+mateApp.useDatabase("/path/to/another.db")
+val result2 = mateApp.validate(6.68, -1.62, 6.68, -1.62)
+```
+
+## CLI (headless)
+
+For scripting/CI — runs as a Gradle test and prints JSON to stdout:
 
 ```bash
-./gradlew :mateapp-core:assembleRelease
+./gradlew :mateapp-core:testDebugUnitTest --tests "*ValidationCLITest" \
+  -DdbPath=/path/to/export.db \
+  -DpickupLat=6.7386 -DpickupLng=-1.5057 \
+  -DdestLat=6.6947 -DdestLng=-1.6156
 ```
 
-The AAR will be at:\
-`mateapp-core/build/outputs/aar/mateapp-core-release.aar`
+Output:
 
-To use the AAR in your Android app:
-
-```gradle
-// Copy mateapp-core-release.aar into app/libs/
-// In app/build.gradle.kts:
-dependencies {
-    implementation(files("libs/mateapp-core-release.aar"))
+```
+=== VALIDATION_RESULT ===
+{
+  "status": "SUCCESS",
+  "fare": 3,
+  "fareType": "journey",
+  "journeyName": "Roman Hill to Tikrom",
+  "pickupAreaName": "Baworo",
+  "pickupStopLabel": "Ahenfie Last Stop",
+  ...
 }
+=== END_VALIDATION_RESULT ===
 ```
 
-## JitPack Distribution
+## API Reference
 
-1. Push this repo to GitHub
-2. Tag a release:
-
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-3. Add JitPack repository to your Android app:
-
-```gradle
-repositories {
-    maven { url = uri("https://jitpack.io") }
-}
-```
-
-4. Add dependency:
-
-```gradle
-dependencies {
-    implementation("com.github.YOUR_USERNAME:mateapp-core-android:1.0.0")
-}
-```
-
-Replace `YOUR_USERNAME` with your GitHub username.
-
-## API
-
-### `MateAppDatabase` (Builder + convenience)
-
-**Instance methods (from `Builder().build()`):**
+### `MateAppDatabase.Builder`
 
 | Method | Description |
 |--------|-------------|
-| `validate(pickupLat, pickupLng, destLat, destLng)` | Validates using the configured dbPath. Opens/closes DB per call. |
-| `useDatabase(dbPath)` | Switch to a different exported .db on the same client |
-| `getDatabasePath()` | Returns the currently configured path |
-| `getSchemaVersion()` | Reads schema version from `_meta` |
-| `getSourceJourneyId()` | Reads journey ID from `_meta` |
+| `.dbPath(String)` | Set path to exported `.db` file |
+| `.build()` | Build the instance |
 
-**Static methods (one-off):**
+### `MateAppDatabase` instance methods
 
-| Method | Description |
-|--------|-------------|
-| `validate(dbPath, pickupLat, pickupLng, destLat, destLng)` | One-liner open → validate → close |
-| `openDb(dbPath)` | Opens exported .db in read-only mode |
-| `closeDb(db)` | Closes safely if open |
-| `getSchemaVersion(dbPath)` | Reads schema version from `_meta` |
-| `getSourceJourneyId(dbPath)` | Reads `source_journey_id` from `_meta` |
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `validate(double, double, double, double)` | `ValidationResult` | Validate fare (pickupLat, pickupLng, destLat, destLng). Opens/closes DB per call. |
+| `useDatabase(String)` | `void` | Switch to a different `.db` on same client |
+| `getDatabasePath()` | `String` | Currently configured path |
+| `getSchemaVersion()` | `int` | Schema version from `_meta` table |
+| `getSourceJourneyId()` | `String?` | Single journey ID from `_meta` |
+| `getSourceJourneyIds()` | `String?` | Comma-separated journey IDs from `_meta` |
 
-### `ValidationEngine.validate(db, pickupLat, pickupLng, destLat, destLng)`
+### `MateAppDatabase` static methods
 
-Runs the full 7-step fare validation pipeline:
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `validate(String, double, double, double, double)` | `ValidationResult` | One-shot open → validate → close |
+| `openDb(String)` | `SQLiteDatabase` | Open read-only |
+| `closeDb(SQLiteDatabase)` | `void` | Close if open |
+| `getSchemaVersion(String)` | `int` | Schema version by path |
+| `getSourceJourneyId(String)` | `String?` | Single journey ID by path |
+| `getSourceJourneyIds(String)` | `String?` | Comma-separated IDs by path |
 
-1. **Pickup stop** — finds nearest stop within 50m, or falls back to nearest stop within 25km
-2. **Pickup area** — resolves from area_stop link, or by point-in-polygon
+### `ValidationEngine`
+
+```java
+ValidationResult result = ValidationEngine.validate(
+    database,          // SQLiteDatabase (opened read-only)
+    5.5620, -0.2050,  // pickup
+    5.6200, -0.0170   // destination
+);
+```
+
+7-step pipeline:
+
+1. **Pickup stop** — nearest stop within 50m, or fallback within 25km
+2. **Pickup area** — from `area_stops` link or point-in-polygon
 3. **Destination stop** — same as step 1
 4. **Destination area** — same as step 2
-5. **Journey** — finds journey containing both areas
-6. **Fare calculation** — intra-area (distance match) or inter-area (journey fare lookup)
-7. **Result** — returns `ValidationResult`
+5. **Journey** — find journey containing both areas
+6. **Fare** — intra-area (distance-match) or inter-area (journey fare lookup)
+7. **Result** — package into `ValidationResult`
 
 ### `GeometryUtils`
 
 | Method | Description |
 |--------|-------------|
-| `haversineDistance(lat1, lng1, lat2, lng2)` | Returns meters between two coordinates |
-| `pointInPolygon(point, polygon)` | Ray-cast point-in-polygon test |
-| `convexHull(points)` | Monotone chain convex hull |
-| `polygonFromStops(stops)` | Convex hull from a list of stops |
-| `polygonFromJson(json)` | Parses `[{"latitude":..,"longitude":..}]` JSON |
+| `haversineDistance(lat1, lng1, lat2, lng2)` | Meters between two coordinates |
+| `pointInPolygon(LatLng, List<LatLng>)` | Ray-cast point-in-polygon |
+| `convexHull(List<LatLng>)` | Monotone chain convex hull |
+| `polygonFromStops(List<Stop>)` | Convex hull from stops |
+| `polygonFromJson(String)` | Parse `[{"latitude":..,"longitude":..}]` JSON (uses Regex, not org.json) |
 
 ### `DatabaseReader`
 
 | Method | Description |
 |--------|-------------|
-| `findByRadius(db, lat, lng, radiusMeters)` | Stops within a bounding box + Haversine filter |
-| `findNearestStop(db, lat, lng)` | Progressive bounding box (1km → 5km → 25km), no full scan |
-| `getAreaStopsByStop(db, stopId)` | Area_stops linked to a stop |
+| `findByRadius(db, lat, lng, radiusMeters)` | Stops within bounding box + Haversine |
+| `findNearestStop(db, lat, lng)` | Progressive bounding box (1km → 5km → 25km) |
+| `getAreaStopsByStop(db, stopId)` | area_stops for a stop |
 | `getArea(db, areaId)` | Area by ID |
-| `getAllAreasWithPolygons(db)` | All areas with non-null polygon |
+| `getAllAreasWithPolygons(db)` | Areas with non-null polygon |
 | `getAllJourneys(db)` | All journeys |
 | `getJourneyAreas(db, journeyId)` | Journey areas ordered by sequence |
-| `getBetweenAreasFare(db, journeyId, fromAreaId, toAreaId)` | Journey fare between two areas |
-| `getFareLevelsByJourney(db, journeyId)` | Fare levels for a journey (sorted by amount) |
-| `getFareLevelsByArea(db, areaId)` | Fare levels linked to an area (sorted by amount) |
+| `getBetweenAreasFare(db, journeyId, fromAreaId, toAreaId)` | Journey fare between areas |
+| `getFareLevelsByJourney(db, journeyId)` | Fare levels for a journey (by amount) |
+| `getFareLevelsByArea(db, areaId)` | Fare levels linked to an area (by amount) |
 
-## Database Schema
+## Schema
 
 Opens any SQLite `.db` file created by MateApp (schema version 5). Tables:
 
-`journeys`, `areas`, `stops`, `fare_levels`, `area_fare_levels`, `area_stops`, `journey_areas`, `journey_fares`, `track_points`, `validation_logs`
+`journeys`, `areas`, `stops`, `fare_levels`, `area_fare_levels`, `area_stops`, `journey_areas`, `journey_fares`, `track_points`, `validation_logs`, `_meta`
 
 ## License
 
