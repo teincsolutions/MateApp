@@ -1,4 +1,4 @@
 jdk:
   - openjdk17
 install:
-  - cd mateapp-core-android && ./gradlew :mateapp-core:assembleRelease :mateapp-core:publishToMavenLocal
+  - ./gradlew :mateapp-core:assembleRelease :mateapp-core:publishToMavenLocal
