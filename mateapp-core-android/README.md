@@ -14,7 +14,7 @@ repositories {
 
 // app/build.gradle.kts
 dependencies {
-    implementation("com.github.teincsolutions:MateApp:v1.0.0")
+    implementation("com.github.teincsolutions:mateapp-core-android:v1.1.0")
 }
 ```
 
@@ -26,7 +26,7 @@ repositories {
 
 // app/build.gradle
 dependencies {
-    implementation 'com.github.teincsolutions:MateApp:v1.0.0'
+    implementation 'com.github.teincsolutions:mateapp-core-android:v1.1.0'
 }
 ```
 
