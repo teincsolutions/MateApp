@@ -43,7 +43,7 @@ tasks.withType<Test> {
 publishing {
     publications {
         register<MavenPublication>("release") {
-            groupId = "com.github.your-username"
+            groupId = "com.github.teincsolutions"
             artifactId = "mateapp-core-android"
             version = "1.0.0"
 
