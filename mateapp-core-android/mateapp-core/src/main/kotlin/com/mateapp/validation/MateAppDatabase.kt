@@ -88,6 +88,30 @@ class MateAppDatabase private constructor(
      * Returns null if not present (e.g. full backup, not journey export).
      * @throws IllegalStateException if no dbPath has been configured.
      */
+    /**
+     * Read the source_journey_ids from the _meta table (plural, comma-separated).
+     * Returns null if not present (e.g. single-journey export uses source_journey_id).
+     * @throws IllegalStateException if no dbPath has been configured.
+     */
+    fun getSourceJourneyIds(): String? {
+        val path = currentDbPath
+            ?: throw IllegalStateException("No database path configured.")
+        val db = openDb(path)
+        return try {
+            val cursor = db.rawQuery(
+                "SELECT value FROM _meta WHERE key = ?",
+                arrayOf(SOURCE_JOURNEY_IDS_KEY),
+            )
+            cursor.use { c ->
+                if (c.moveToFirst()) c.getString(0) else null
+            }
+        } catch (_: Exception) {
+            null
+        } finally {
+            closeDb(db)
+        }
+    }
+
     fun getSourceJourneyId(): String? {
         val path = currentDbPath
             ?: throw IllegalStateException("No database path configured.")
@@ -110,11 +134,12 @@ class MateAppDatabase private constructor(
     // -- Static convenience methods (one-off usage) --
 
     companion object {
-        private const val SCHEMA_VERSION_KEY = "schema_version"
-        private const val SOURCE_JOURNEY_KEY = "source_journey_id"
+    private const val SCHEMA_VERSION_KEY = "schema_version"
+    private const val SOURCE_JOURNEY_KEY = "source_journey_id"
+    private const val SOURCE_JOURNEY_IDS_KEY = "source_journey_ids"
 
-        /**
-         * One-liner validation without creating a client.
+    /**
+     * One-liner validation without creating a client.
          * Opens, validates, and closes the database in one call.
          *
          * Usage:
@@ -167,6 +192,23 @@ class MateAppDatabase private constructor(
                 }
             } catch (_: Exception) {
                 0
+            } finally {
+                closeDb(db)
+            }
+        }
+
+        fun getSourceJourneyIds(dbPath: String): String? {
+            val db = openDb(dbPath)
+            return try {
+                val cursor = db.rawQuery(
+                    "SELECT value FROM _meta WHERE key = ?",
+                    arrayOf(SOURCE_JOURNEY_IDS_KEY),
+                )
+                cursor.use { c ->
+                    if (c.moveToFirst()) c.getString(0) else null
+                }
+            } catch (_: Exception) {
+                null
             } finally {
                 closeDb(db)
             }

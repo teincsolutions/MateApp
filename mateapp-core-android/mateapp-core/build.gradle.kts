@@ -27,6 +27,19 @@ android {
     }
 }
 
+tasks.withType<Test> {
+    // Forward CLI properties for ValidationCLITest
+    listOf("dbPath", "pickupLat", "pickupLng", "destLat", "destLng").forEach { key ->
+        val value = System.getProperty(key)
+        if (value != null) {
+            systemProperty(key, value)
+        }
+    }
+    testLogging {
+        showStandardStreams = true
+    }
+}
+
 publishing {
     publications {
         register<MavenPublication>("release") {
