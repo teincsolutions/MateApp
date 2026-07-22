@@ -41,8 +41,8 @@ export default function JourneysScreen() {
     setExporting(journey.id);
     try {
       await exportJourneyToFile([journey.id]);
-    } catch {
-      Alert.alert('Error', 'Export failed.');
+    } catch (err) {
+      console.error('[JourneysList] export failed:', err);
     }
     setExporting(null);
   };

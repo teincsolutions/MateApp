@@ -1,6 +1,6 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { JourneyRepository } from '../../adapters/index';
@@ -56,26 +56,21 @@ export default function ExportScreen() {
   const handleExportJourney = async (journey: Journey) => {
     setExporting(journey.id);
     try {
-      const path = await exportJourneyToFile([journey.id], format);
-      if (!path) Alert.alert('Error', 'Failed to export journey.');
-    } catch {
-      Alert.alert('Error', 'Export failed.');
+      await exportJourneyToFile([journey.id], format);
+    } catch (err) {
+      console.error('[ExportScreen] exportJourney failed:', err);
     }
     setExporting(null);
   };
 
   const handleExportSelected = async () => {
     const ids = [...selected];
-    if (ids.length === 0) {
-      Alert.alert('No Selection', 'Select at least one journey to export.');
-      return;
-    }
+    if (ids.length === 0) return;
     setExporting('selected');
     try {
-      const path = await exportJourneyToFile(ids, format);
-      if (!path) Alert.alert('Error', 'Failed to export.');
-    } catch {
-      Alert.alert('Error', 'Export failed.');
+      await exportJourneyToFile(ids, format);
+    } catch (err) {
+      console.error('[ExportScreen] exportSelected failed:', err);
     }
     setExporting(null);
   };
@@ -83,10 +78,9 @@ export default function ExportScreen() {
   const handleMasterExport = async () => {
     setExporting('master');
     try {
-      const path = await exportMasterToFile(format);
-      if (!path) Alert.alert('Error', 'Failed to export data.');
-    } catch {
-      Alert.alert('Error', 'Export failed.');
+      await exportMasterToFile(format);
+    } catch (err) {
+      console.error('[ExportScreen] masterExport failed:', err);
     }
     setExporting(null);
   };

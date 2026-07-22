@@ -63,13 +63,21 @@ export class JourneyExportService {
     if (journeyIds.length === 0) throw new Error('No journeys selected');
 
     const label = journeyIds.length === 1 ? `export-${journeyIds[0]}.db` : `export-${journeyIds.length}-journeys.db`;
+    console.log('[JourneyExportService] Exporting journeys:', journeyIds, '->', label);
 
     // Fetch all journeys
     const jh = journeyIds.map(() => '?').join(',');
-    const journeys = (await sourceDb.getAllAsync(
-      `SELECT * FROM journeys WHERE id IN (${jh})`,
-      journeyIds,
-    )) as Record<string, any>[];
+    let journeys: Record<string, any>[];
+    try {
+      journeys = (await sourceDb.getAllAsync(
+        `SELECT * FROM journeys WHERE id IN (${jh})`,
+        journeyIds,
+      )) as Record<string, any>[];
+    } catch (qErr) {
+      console.error('[JourneyExportService] Failed to fetch journeys:', qErr);
+      throw new Error(`Failed to query source DB: ${qErr instanceof Error ? qErr.message : qErr}`);
+    }
+    console.log('[JourneyExportService] Found journeys:', journeys.length);
     if (journeys.length === 0) throw new Error('No journeys found');
 
     // Fetch all journey_areas for selected journeys
@@ -124,13 +132,13 @@ export class JourneyExportService {
       try { await exportDb.execAsync(stmt + ';'); } catch { /* table may exist */ }
     }
 
-    // Metadata
+    // Metadata (use INSERT OR REPLACE to handle re-exports)
     await exportDb.runAsync(
-      "INSERT INTO _meta (key, value) VALUES ('source_journey_ids', ?)",
+      "INSERT OR REPLACE INTO _meta (key, value) VALUES ('source_journey_ids', ?)",
       [journeyIds.join(',')],
     );
     await exportDb.runAsync(
-      "INSERT INTO _meta (key, value) VALUES ('exported_at', ?)",
+      "INSERT OR REPLACE INTO _meta (key, value) VALUES ('exported_at', ?)",
       [new Date().toISOString()],
     );
 

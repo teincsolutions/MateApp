@@ -115,7 +115,9 @@ export default function JourneyEditScreen() {
         dialogTitle: `Export ${name}`,
       });
     } catch (err) {
-      Alert.alert("Export Failed", err instanceof Error ? err.message : "Unknown error");
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[JourneyEdit] export failed:", msg);
+      Alert.alert("Export Failed", msg);
     }
   };
 
